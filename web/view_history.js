@@ -21,8 +21,8 @@ const DEFAULT_VIEW_HISTORY_CACHE_SIZE = 20;
  *
  * The way that the view parameters are stored depends on how PDF.js is built,
  * for 'gulp <flag>' the following cases exist:
- *  - FIREFOX or MOZCENTRAL - uses sessionStorage.
- *  - GENERIC or CHROME     - uses localStorage, if it is available.
+ *  - MOZCENTRAL        - uses sessionStorage.
+ *  - GENERIC or CHROME - uses localStorage, if it is available.
  */
 class ViewHistory {
   constructor(fingerprint, cacheSize = DEFAULT_VIEW_HISTORY_CACHE_SIZE) {
@@ -31,19 +31,20 @@ class ViewHistory {
 
     this._initializedPromise = this._readFromStorage().then(databaseStr => {
       const database = JSON.parse(databaseStr || "{}");
-      if (!("files" in database)) {
+      let index = -1;
+      if (!Array.isArray(database.files)) {
         database.files = [];
       } else {
         while (database.files.length >= this.cacheSize) {
           database.files.shift();
         }
-      }
-      let index = -1;
-      for (let i = 0, length = database.files.length; i < length; i++) {
-        const branch = database.files[i];
-        if (branch.fingerprint === this.fingerprint) {
-          index = i;
-          break;
+
+        for (let i = 0, ii = database.files.length; i < ii; i++) {
+          const branch = database.files[i];
+          if (branch.fingerprint === this.fingerprint) {
+            index = i;
+            break;
+          }
         }
       }
       if (index === -1) {
@@ -57,10 +58,7 @@ class ViewHistory {
   async _writeToStorage() {
     const databaseStr = JSON.stringify(this.database);
 
-    if (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("FIREFOX || MOZCENTRAL")
-    ) {
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       sessionStorage.setItem("pdfjs.history", databaseStr);
       return;
     }
@@ -68,10 +66,7 @@ class ViewHistory {
   }
 
   async _readFromStorage() {
-    if (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("FIREFOX || MOZCENTRAL")
-    ) {
+    if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
       return sessionStorage.getItem("pdfjs.history");
     }
     return localStorage.getItem("pdfjs.history");

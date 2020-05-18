@@ -35,21 +35,24 @@ var SCALE = 1.0;
 
 var container = document.getElementById("pageContainer");
 
+var eventBus = new pdfjsViewer.EventBus();
+
 // Loading document.
 var loadingTask = pdfjsLib.getDocument({
   url: DEFAULT_URL,
   cMapUrl: CMAP_URL,
   cMapPacked: CMAP_PACKED,
 });
-loadingTask.promise.then(function(pdfDocument) {
+loadingTask.promise.then(function (pdfDocument) {
   // Document loaded, retrieving the page.
-  return pdfDocument.getPage(PAGE_TO_VIEW).then(function(pdfPage) {
+  return pdfDocument.getPage(PAGE_TO_VIEW).then(function (pdfPage) {
     // Creating the page view with default parameters.
     var pdfPageView = new pdfjsViewer.PDFPageView({
       container: container,
       id: PAGE_TO_VIEW,
       scale: SCALE,
       defaultViewport: pdfPage.getViewport({ scale: SCALE }),
+      eventBus: eventBus,
       // We can enable text/annotations layers, if needed
       textLayerFactory: new pdfjsViewer.DefaultTextLayerFactory(),
       annotationLayerFactory: new pdfjsViewer.DefaultAnnotationLayerFactory(),

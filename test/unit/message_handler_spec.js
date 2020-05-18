@@ -21,7 +21,7 @@ import {
 import { LoopbackPort } from "../../src/display/api.js";
 import { MessageHandler } from "../../src/shared/message_handler.js";
 
-describe("message_handler", function() {
+describe("message_handler", function () {
   // Sleep function to wait for sometime, similar to setTimeout but faster.
   function sleep(ticks) {
     return Promise.resolve().then(() => {
@@ -29,26 +29,26 @@ describe("message_handler", function() {
     });
   }
 
-  describe("sendWithStream", function() {
-    it("should return a ReadableStream", function() {
-      let port = new LoopbackPort();
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let readable = messageHandler1.sendWithStream("fakeHandler");
+  describe("sendWithStream", function () {
+    it("should return a ReadableStream", function () {
+      const port = new LoopbackPort();
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const readable = messageHandler1.sendWithStream("fakeHandler");
       // Check if readable is an instance of ReadableStream.
       expect(typeof readable).toEqual("object");
       expect(typeof readable.getReader).toEqual("function");
     });
 
-    it("should read using a reader", function(done) {
+    it("should read using a reader", function (done) {
       let log = "";
-      let port = new LoopbackPort();
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let messageHandler2 = new MessageHandler("worker", "main", port);
+      const port = new LoopbackPort();
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const messageHandler2 = new MessageHandler("worker", "main", port);
       messageHandler2.on("fakeHandler", (data, sink) => {
-        sink.onPull = function() {
+        sink.onPull = function () {
           log += "p";
         };
-        sink.onCancel = function(reason) {
+        sink.onCancel = function (reason) {
           log += "c";
         };
         sink.ready
@@ -61,7 +61,7 @@ describe("message_handler", function() {
           });
         return sleep(5);
       });
-      let readable = messageHandler1.sendWithStream(
+      const readable = messageHandler1.sendWithStream(
         "fakeHandler",
         {},
         {
@@ -71,7 +71,7 @@ describe("message_handler", function() {
           },
         }
       );
-      let reader = readable.getReader();
+      const reader = readable.getReader();
       sleep(10)
         .then(() => {
           expect(log).toEqual("");
@@ -93,15 +93,15 @@ describe("message_handler", function() {
         });
     });
 
-    it("should not read any data when cancelled", function(done) {
+    it("should not read any data when cancelled", function (done) {
       let log = "";
-      let port = new LoopbackPort();
-      let messageHandler2 = new MessageHandler("worker", "main", port);
+      const port = new LoopbackPort();
+      const messageHandler2 = new MessageHandler("worker", "main", port);
       messageHandler2.on("fakeHandler", (data, sink) => {
-        sink.onPull = function() {
+        sink.onPull = function () {
           log += "p";
         };
-        sink.onCancel = function(reason) {
+        sink.onCancel = function (reason) {
           log += "c";
         };
         log += "0";
@@ -126,8 +126,8 @@ describe("message_handler", function() {
             }
           );
       });
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let readable = messageHandler1.sendWithStream(
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const readable = messageHandler1.sendWithStream(
         "fakeHandler",
         {},
         {
@@ -138,7 +138,7 @@ describe("message_handler", function() {
         }
       );
 
-      let reader = readable.getReader();
+      const reader = readable.getReader();
       sleep(10)
         .then(() => {
           expect(log).toEqual("01");
@@ -159,15 +159,15 @@ describe("message_handler", function() {
         });
     });
 
-    it("should not read when errored", function(done) {
+    it("should not read when errored", function (done) {
       let log = "";
-      let port = new LoopbackPort();
-      let messageHandler2 = new MessageHandler("worker", "main", port);
+      const port = new LoopbackPort();
+      const messageHandler2 = new MessageHandler("worker", "main", port);
       messageHandler2.on("fakeHandler", (data, sink) => {
-        sink.onPull = function() {
+        sink.onPull = function () {
           log += "p";
         };
-        sink.onCancel = function(reason) {
+        sink.onCancel = function (reason) {
           log += "c";
         };
         log += "0";
@@ -182,8 +182,8 @@ describe("message_handler", function() {
             sink.error(new Error("should not read when errored"));
           });
       });
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let readable = messageHandler1.sendWithStream(
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const readable = messageHandler1.sendWithStream(
         "fakeHandler",
         {},
         {
@@ -194,7 +194,7 @@ describe("message_handler", function() {
         }
       );
 
-      let reader = readable.getReader();
+      const reader = readable.getReader();
 
       sleep(10)
         .then(() => {
@@ -214,15 +214,15 @@ describe("message_handler", function() {
         });
     });
 
-    it("should read data with blocking promise", function(done) {
+    it("should read data with blocking promise", function (done) {
       let log = "";
-      let port = new LoopbackPort();
-      let messageHandler2 = new MessageHandler("worker", "main", port);
+      const port = new LoopbackPort();
+      const messageHandler2 = new MessageHandler("worker", "main", port);
       messageHandler2.on("fakeHandler", (data, sink) => {
-        sink.onPull = function() {
+        sink.onPull = function () {
           log += "p";
         };
-        sink.onCancel = function(reason) {
+        sink.onCancel = function (reason) {
           log += "c";
         };
         log += "0";
@@ -242,8 +242,8 @@ describe("message_handler", function() {
           });
       });
 
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let readable = messageHandler1.sendWithStream(
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const readable = messageHandler1.sendWithStream(
         "fakeHandler",
         {},
         {
@@ -254,7 +254,7 @@ describe("message_handler", function() {
         }
       );
 
-      let reader = readable.getReader();
+      const reader = readable.getReader();
       // Sleep for 10ms, so that read() is not unblocking the ready promise.
       // Chain all read() to stream in sequence.
       sleep(10)
@@ -290,15 +290,15 @@ describe("message_handler", function() {
     it(
       "should read data with blocking promise and buffer whole data" +
         " into stream",
-      function(done) {
+      function (done) {
         let log = "";
-        let port = new LoopbackPort();
-        let messageHandler2 = new MessageHandler("worker", "main", port);
+        const port = new LoopbackPort();
+        const messageHandler2 = new MessageHandler("worker", "main", port);
         messageHandler2.on("fakeHandler", (data, sink) => {
-          sink.onPull = function() {
+          sink.onPull = function () {
             log += "p";
           };
-          sink.onCancel = function(reason) {
+          sink.onCancel = function (reason) {
             log += "c";
           };
           log += "0";
@@ -319,8 +319,8 @@ describe("message_handler", function() {
           return sleep(10);
         });
 
-        let messageHandler1 = new MessageHandler("main", "worker", port);
-        let readable = messageHandler1.sendWithStream(
+        const messageHandler1 = new MessageHandler("main", "worker", port);
+        const readable = messageHandler1.sendWithStream(
           "fakeHandler",
           {},
           {
@@ -331,7 +331,7 @@ describe("message_handler", function() {
           }
         );
 
-        let reader = readable.getReader();
+        const reader = readable.getReader();
 
         sleep(10)
           .then(() => {
@@ -364,16 +364,16 @@ describe("message_handler", function() {
       }
     );
 
-    it("should ignore any pull after close is called", function(done) {
+    it("should ignore any pull after close is called", function (done) {
       let log = "";
-      let port = new LoopbackPort();
-      let capability = createPromiseCapability();
-      let messageHandler2 = new MessageHandler("worker", "main", port);
+      const port = new LoopbackPort();
+      const capability = createPromiseCapability();
+      const messageHandler2 = new MessageHandler("worker", "main", port);
       messageHandler2.on("fakeHandler", (data, sink) => {
-        sink.onPull = function() {
+        sink.onPull = function () {
           log += "p";
         };
-        sink.onCancel = function(reason) {
+        sink.onCancel = function (reason) {
           log += "c";
         };
         log += "0";
@@ -386,8 +386,8 @@ describe("message_handler", function() {
         });
       });
 
-      let messageHandler1 = new MessageHandler("main", "worker", port);
-      let readable = messageHandler1.sendWithStream(
+      const messageHandler1 = new MessageHandler("main", "worker", port);
+      const readable = messageHandler1.sendWithStream(
         "fakeHandler",
         {},
         {
@@ -398,7 +398,7 @@ describe("message_handler", function() {
         }
       );
 
-      let reader = readable.getReader();
+      const reader = readable.getReader();
 
       sleep(10)
         .then(() => {

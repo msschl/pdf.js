@@ -41,7 +41,7 @@ if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("PRODUCTION")) {
   pdfjsWebAppOptions = require("./app_options.js");
 }
 
-if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("FIREFOX || MOZCENTRAL")) {
+if (typeof PDFJSDev !== "undefined" && PDFJSDev.test("MOZCENTRAL")) {
   require("./firefoxcom.js");
   require("./firefox_print_service.js");
 }
@@ -60,7 +60,7 @@ function getViewerConfiguration() {
     appContainer: document.body,
     mainContainer: document.getElementById("viewerContainer"),
     viewerContainer: document.getElementById("viewer"),
-    eventBus: null, // Using global event bus with (optional) DOM events.
+    eventBus: null,
     toolbar: {
       container: document.getElementById("toolbarViewer"),
       numPages: document.getElementById("numPages"),
@@ -193,7 +193,7 @@ function webViewerLoad() {
       SystemJS.import("pdfjs-web/app_options.js"),
       SystemJS.import("pdfjs-web/genericcom.js"),
       SystemJS.import("pdfjs-web/pdf_print_service.js"),
-    ]).then(function([app, appOptions, ...otherModules]) {
+    ]).then(function ([app, appOptions, ...otherModules]) {
       window.PDFViewerApplication = app.PDFViewerApplication;
       window.PDFViewerApplicationOptions = appOptions.AppOptions;
       app.PDFViewerApplication.run(config);
@@ -211,8 +211,20 @@ function webViewerLoad() {
       // set various `AppOptions`, by dispatching an event once all viewer
       // files are loaded but *before* the viewer initialization has run.
       const event = document.createEvent("CustomEvent");
-      event.initCustomEvent("webviewerloaded", true, true, {});
-      document.dispatchEvent(event);
+      event.initCustomEvent("webviewerloaded", true, true, {
+        source: window,
+      });
+      try {
+        // Attempt to dispatch the event at the embedding `document`,
+        // in order to support cases where the viewer is embedded in
+        // a *dynamically* created <iframe> element.
+        parent.document.dispatchEvent(event);
+      } catch (ex) {
+        // The viewer could be in e.g. a cross-origin <iframe> element,
+        // fallback to dispatching the event at the current `document`.
+        console.error(`webviewerloaded: ${ex}`);
+        document.dispatchEvent(event);
+      }
     }
 
     pdfjsWebApp.PDFViewerApplication.run(config);

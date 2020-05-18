@@ -36,6 +36,7 @@ class NativeImageDecoder {
   canDecode(image) {
     return (
       image instanceof JpegStream &&
+      image.maybeValidDimensions &&
       NativeImageDecoder.isDecodable(
         image,
         this.xref,
@@ -61,7 +62,7 @@ class NativeImageDecoder {
         image.getIR(this.forceDataSchema),
         colorSpace.numComps,
       ])
-      .then(function({ data, width, height }) {
+      .then(function ({ data, width, height }) {
         return new Stream(data, 0, data.length, dict);
       });
   }

@@ -23,7 +23,6 @@ import {
   isArrayEqual,
   isBool,
   isNum,
-  isSpace,
   isString,
   OPS,
   shadow,
@@ -33,9 +32,17 @@ import {
   warn,
 } from "../shared/util.js";
 import { Catalog, ObjectLoader, XRef } from "./obj.js";
-import { Dict, isDict, isName, isStream, Ref } from "./primitives.js";
+import {
+  clearPrimitiveCaches,
+  Dict,
+  isDict,
+  isName,
+  isStream,
+  Ref,
+} from "./primitives.js";
 import {
   getInheritableProperty,
+  isWhiteSpace,
   MissingDataException,
   XRefEntryException,
   XRefParseException,
@@ -209,8 +216,8 @@ class Page {
       // Fetching the individual streams from the array.
       const xref = this.xref;
       const streams = [];
-      for (const stream of content) {
-        streams.push(xref.fetchIfRef(stream));
+      for (const subStream of content) {
+        streams.push(xref.fetchIfRef(subStream));
       }
       stream = new StreamsSequenceStream(streams);
     } else if (isStream(content)) {
@@ -275,7 +282,7 @@ class Page {
           resources: this.resources,
           operatorList: opList,
         })
-        .then(function() {
+        .then(function () {
           return opList;
         });
     });
@@ -283,7 +290,7 @@ class Page {
     // Fetch the page's annotations and add their operator lists to the
     // page's operator list to render them.
     return Promise.all([pageListPromise, this._parsedAnnotations]).then(
-      function([pageOpList, annotations]) {
+      function ([pageOpList, annotations]) {
         if (annotations.length === 0) {
           pageOpList.flush(true);
           return { length: pageOpList.totalLength };
@@ -295,16 +302,20 @@ class Page {
         for (const annotation of annotations) {
           if (isAnnotationRenderable(annotation, intent)) {
             opListPromises.push(
-              annotation.getOperatorList(
-                partialEvaluator,
-                task,
-                renderInteractiveForms
-              )
+              annotation
+                .getOperatorList(partialEvaluator, task, renderInteractiveForms)
+                .catch(function (reason) {
+                  warn(
+                    "getOperatorList - ignoring annotation data during " +
+                      `"${task.name}" task: "${reason}".`
+                  );
+                  return null;
+                })
             );
           }
         }
 
-        return Promise.all(opListPromises).then(function(opLists) {
+        return Promise.all(opListPromises).then(function (opLists) {
           pageOpList.addOp(OPS.beginAnnotations, []);
           for (const opList of opLists) {
             pageOpList.addOpList(opList);
@@ -359,7 +370,7 @@ class Page {
   }
 
   getAnnotationsData(intent) {
-    return this._parsedAnnotations.then(function(annotations) {
+    return this._parsedAnnotations.then(function (annotations) {
       const annotationsData = [];
       for (let i = 0, ii = annotations.length; i < ii; i++) {
         if (!intent || isAnnotationRenderable(annotations[i], intent)) {
@@ -382,30 +393,24 @@ class Page {
     const parsedAnnotations = this.pdfManager
       .ensure(this, "annotations")
       .then(() => {
-        const annotationRefs = this.annotations;
         const annotationPromises = [];
-        for (let i = 0, ii = annotationRefs.length; i < ii; i++) {
+        for (const annotationRef of this.annotations) {
           annotationPromises.push(
             AnnotationFactory.create(
               this.xref,
-              annotationRefs[i],
+              annotationRef,
               this.pdfManager,
               this.idFactory
-            )
+            ).catch(function (reason) {
+              warn(`_parsedAnnotations: "${reason}".`);
+              return null;
+            })
           );
         }
 
-        return Promise.all(annotationPromises).then(
-          function(annotations) {
-            return annotations.filter(function isDefined(annotation) {
-              return !!annotation;
-            });
-          },
-          function(reason) {
-            warn(`_parsedAnnotations: "${reason}".`);
-            return [];
-          }
-        );
+        return Promise.all(annotationPromises).then(function (annotations) {
+          return annotations.filter(annotation => !!annotation);
+        });
       });
 
     return shadow(this, "_parsedAnnotations", parsedAnnotations);
@@ -421,6 +426,8 @@ const ENDOBJ_SIGNATURE = new Uint8Array([0x65, 0x6e, 0x64, 0x6f, 0x62, 0x6a]);
 const FINGERPRINT_FIRST_BYTES = 1024;
 const EMPTY_FINGERPRINT =
   "\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00";
+
+const PDF_HEADER_VERSION_REGEXP = /^[1-9]\.[0-9]$/;
 
 function find(stream, signature, limit = 1024, backwards = false) {
   if (
@@ -589,7 +596,7 @@ class PDFDocument {
         let ch;
         do {
           ch = stream.getByte();
-        } while (isSpace(ch));
+        } while (isWhiteSpace(ch));
         let str = "";
         while (ch >= /* Space = */ 0x20 && ch <= /* '9' = */ 0x39) {
           str += String.fromCharCode(ch);
@@ -661,8 +668,17 @@ class PDFDocument {
       Trapped: isName,
     };
 
+    let version = this.pdfFormatVersion;
+    if (
+      typeof version !== "string" ||
+      !PDF_HEADER_VERSION_REGEXP.test(version)
+    ) {
+      warn(`Invalid PDF header version number: ${version}`);
+      version = null;
+    }
+
     const docInfo = {
-      PDFFormatVersion: this.pdfFormatVersion,
+      PDFFormatVersion: version,
       IsLinearized: !!this.linearization,
       IsAcroFormPresent: !!this.acroForm,
       IsXFAPresent: !!this.xfa,
@@ -707,10 +723,10 @@ class PDFDocument {
             continue;
           }
 
-          if (!docInfo["Custom"]) {
-            docInfo["Custom"] = Object.create(null);
+          if (!docInfo.Custom) {
+            docInfo.Custom = Object.create(null);
           }
-          docInfo["Custom"][key] = customValue;
+          docInfo.Custom[key] = customValue;
         }
       }
     }
@@ -745,7 +761,15 @@ class PDFDocument {
 
   _getLinearizationPage(pageIndex) {
     const { catalog, linearization } = this;
-    assert(linearization && linearization.pageFirst === pageIndex);
+    if (
+      typeof PDFJSDev === "undefined" ||
+      PDFJSDev.test("!PRODUCTION || TESTING")
+    ) {
+      assert(
+        linearization && linearization.pageFirst === pageIndex,
+        "_getLinearizationPage - invalid pageIndex argument."
+      );
+    }
 
     const ref = Ref.get(linearization.objectNumberFirst, 0);
     return this.xref
@@ -815,8 +839,8 @@ class PDFDocument {
     return this.catalog.fontFallback(id, handler);
   }
 
-  cleanup() {
-    return this.catalog.cleanup();
+  async cleanup() {
+    return this.catalog ? this.catalog.cleanup() : clearPrimitiveCaches();
   }
 }
 

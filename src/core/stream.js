@@ -19,15 +19,12 @@
  * license.
  */
 
-import {
-  FormatError,
-  isSpace,
-  stringToBytes,
-  unreachable,
-} from "../shared/util.js";
+import { FormatError, stringToBytes, unreachable } from "../shared/util.js";
 import { isDict } from "./primitives.js";
+import { isWhiteSpace } from "./core_utils.js";
 
 var Stream = (function StreamClosure() {
+  // eslint-disable-next-line no-shadow
   function Stream(arrayBuffer, start, length, dict) {
     this.bytes =
       arrayBuffer instanceof Uint8Array
@@ -76,7 +73,7 @@ var Stream = (function StreamClosure() {
       var strEnd = this.end;
 
       if (!length) {
-        let subarray = bytes.subarray(pos, strEnd);
+        const subarray = bytes.subarray(pos, strEnd);
         // `this.bytes` is always a `Uint8Array` here.
         return forceClamped ? new Uint8ClampedArray(subarray) : subarray;
       }
@@ -85,7 +82,7 @@ var Stream = (function StreamClosure() {
         end = strEnd;
       }
       this.pos = end;
-      let subarray = bytes.subarray(pos, end);
+      const subarray = bytes.subarray(pos, end);
       // `this.bytes` is always a `Uint8Array` here.
       return forceClamped ? new Uint8ClampedArray(subarray) : subarray;
     },
@@ -133,8 +130,9 @@ var Stream = (function StreamClosure() {
 })();
 
 var StringStream = (function StringStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function StringStream(str) {
-    let bytes = stringToBytes(str);
+    const bytes = stringToBytes(str);
     Stream.call(this, bytes);
   }
 
@@ -151,6 +149,7 @@ var DecodeStream = (function DecodeStreamClosure() {
   // buffer.
   var emptyBuffer = new Uint8Array(0);
 
+  // eslint-disable-next-line no-shadow
   function DecodeStream(maybeMinBufferLength) {
     this._rawMinBufferLength = maybeMinBufferLength || 0;
 
@@ -235,7 +234,7 @@ var DecodeStream = (function DecodeStreamClosure() {
       }
 
       this.pos = end;
-      let subarray = this.buffer.subarray(pos, end);
+      const subarray = this.buffer.subarray(pos, end);
       // `this.buffer` is either a `Uint8Array` or `Uint8ClampedArray` here.
       return forceClamped && !(subarray instanceof Uint8ClampedArray)
         ? new Uint8ClampedArray(subarray)
@@ -286,6 +285,7 @@ var DecodeStream = (function DecodeStreamClosure() {
 })();
 
 var StreamsSequenceStream = (function StreamsSequenceStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function StreamsSequenceStream(streams) {
     this.streams = streams;
 
@@ -430,6 +430,7 @@ var FlateStream = (function FlateStreamClosure() {
     0x50003, 0x50013, 0x5000b, 0x5001b, 0x50007, 0x50017, 0x5000f, 0x00000
   ]), 5];
 
+  // eslint-disable-next-line no-shadow
   function FlateStream(str, maybeLength) {
     this.str = str;
     this.dict = str.dict;
@@ -715,6 +716,7 @@ var FlateStream = (function FlateStreamClosure() {
 })();
 
 var PredictorStream = (function PredictorStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function PredictorStream(str, maybeLength, params) {
     if (!isDict(params)) {
       return str; // no prediction
@@ -936,6 +938,7 @@ var PredictorStream = (function PredictorStreamClosure() {
 })();
 
 var DecryptStream = (function DecryptStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function DecryptStream(str, maybeLength, decrypt) {
     this.str = str;
     this.dict = str.dict;
@@ -982,6 +985,7 @@ var DecryptStream = (function DecryptStreamClosure() {
 })();
 
 var Ascii85Stream = (function Ascii85StreamClosure() {
+  // eslint-disable-next-line no-shadow
   function Ascii85Stream(str, maybeLength) {
     this.str = str;
     this.dict = str.dict;
@@ -1005,7 +1009,7 @@ var Ascii85Stream = (function Ascii85StreamClosure() {
     var str = this.str;
 
     var c = str.getByte();
-    while (isSpace(c)) {
+    while (isWhiteSpace(c)) {
       c = str.getByte();
     }
 
@@ -1030,7 +1034,7 @@ var Ascii85Stream = (function Ascii85StreamClosure() {
       input[0] = c;
       for (i = 1; i < 5; ++i) {
         c = str.getByte();
-        while (isSpace(c)) {
+        while (isWhiteSpace(c)) {
           c = str.getByte();
         }
 
@@ -1066,6 +1070,7 @@ var Ascii85Stream = (function Ascii85StreamClosure() {
 })();
 
 var AsciiHexStream = (function AsciiHexStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function AsciiHexStream(str, maybeLength) {
     this.str = str;
     this.dict = str.dict;
@@ -1132,6 +1137,7 @@ var AsciiHexStream = (function AsciiHexStreamClosure() {
 })();
 
 var RunLengthStream = (function RunLengthStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function RunLengthStream(str, maybeLength) {
     this.str = str;
     this.dict = str.dict;
@@ -1179,6 +1185,7 @@ var RunLengthStream = (function RunLengthStreamClosure() {
 })();
 
 var LZWStream = (function LZWStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function LZWStream(str, maybeLength, earlyChange) {
     this.str = str;
     this.dict = str.dict;
@@ -1315,6 +1322,7 @@ var LZWStream = (function LZWStreamClosure() {
 })();
 
 var NullStream = (function NullStreamClosure() {
+  // eslint-disable-next-line no-shadow
   function NullStream() {
     Stream.call(this, new Uint8Array(0));
   }

@@ -17,7 +17,7 @@
 "use strict";
 
 var FontInspector = (function FontInspectorClosure() {
-  var fonts, createObjectURL;
+  var fonts;
   var active = false;
   var fontAttribute = "data-font-name";
   function removeSelection() {
@@ -67,7 +67,6 @@ var FontInspector = (function FontInspectorClosure() {
     manager: null,
     init: function init(pdfjsLib) {
       var panel = this.panel;
-      panel.setAttribute("style", "padding: 5px;");
       var tmp = document.createElement("button");
       tmp.addEventListener("click", resetSelection);
       tmp.textContent = "Refresh";
@@ -75,8 +74,6 @@ var FontInspector = (function FontInspectorClosure() {
 
       fonts = document.createElement("div");
       panel.appendChild(fonts);
-
-      createObjectURL = pdfjsLib.createObjectURL;
     },
     cleanup: function cleanup() {
       fonts.textContent = "";
@@ -112,7 +109,7 @@ var FontInspector = (function FontInspectorClosure() {
         return moreInfo;
       }
       var moreInfo = properties(fontObj, ["name", "type"]);
-      var fontName = fontObj.loadedName;
+      const fontName = fontObj.loadedName;
       var font = document.createElement("div");
       var name = document.createElement("span");
       name.textContent = fontName;
@@ -121,27 +118,24 @@ var FontInspector = (function FontInspectorClosure() {
         url = /url\(['"]?([^\)"']+)/.exec(url);
         download.href = url[1];
       } else if (fontObj.data) {
-        download.href = createObjectURL(fontObj.data, fontObj.mimeType);
+        download.href = URL.createObjectURL(
+          new Blob([fontObj.data], { type: fontObj.mimeType })
+        );
       }
       download.textContent = "Download";
       var logIt = document.createElement("a");
       logIt.href = "";
       logIt.textContent = "Log";
-      logIt.addEventListener("click", function(event) {
+      logIt.addEventListener("click", function (event) {
         event.preventDefault();
         console.log(fontObj);
       });
-      var select = document.createElement("input");
+      const select = document.createElement("input");
       select.setAttribute("type", "checkbox");
       select.dataset.fontName = fontName;
-      select.addEventListener(
-        "click",
-        (function(select, fontName) {
-          return function() {
-            selectFont(fontName, select.checked);
-          };
-        })(select, fontName)
-      );
+      select.addEventListener("click", function () {
+        selectFont(fontName, select.checked);
+      });
       font.appendChild(select);
       font.appendChild(name);
       font.appendChild(document.createTextNode(" "));
@@ -178,10 +172,9 @@ var StepperManager = (function StepperManagerClosure() {
     manager: null,
     init: function init(pdfjsLib) {
       var self = this;
-      this.panel.setAttribute("style", "padding: 5px;");
       stepperControls = document.createElement("div");
       stepperChooser = document.createElement("select");
-      stepperChooser.addEventListener("change", function(event) {
+      stepperChooser.addEventListener("change", function (event) {
         self.selectStepper(this.value);
       });
       stepperControls.appendChild(stepperChooser);
@@ -292,6 +285,7 @@ var Stepper = (function StepperClosure() {
     return simpleObj;
   }
 
+  // eslint-disable-next-line no-shadow
   function Stepper(panel, pageIndex, initialBreakPoints) {
     this.panel = panel;
     this.breakPoint = 0;
@@ -396,7 +390,7 @@ var Stepper = (function StepperClosure() {
       this.table.appendChild(chunk);
     },
     getNextBreakPoint: function getNextBreakPoint() {
-      this.breakPoints.sort(function(a, b) {
+      this.breakPoints.sort(function (a, b) {
         return a - b;
       });
       for (var i = 0; i < this.breakPoints.length; i++) {
@@ -411,7 +405,7 @@ var Stepper = (function StepperClosure() {
       var self = this;
       var dom = document;
       self.currentIdx = idx;
-      var listener = function(e) {
+      var listener = function (e) {
         switch (e.keyCode) {
           case 83: // step
             dom.removeEventListener("keydown", listener);
@@ -468,9 +462,7 @@ var Stats = (function Stats() {
     name: "Stats",
     panel: null,
     manager: null,
-    init(pdfjsLib) {
-      this.panel.setAttribute("style", "padding: 5px;");
-    },
+    init(pdfjsLib) {},
     enabled: false,
     active: false,
     // Stats specific functions.
@@ -480,7 +472,7 @@ var Stats = (function Stats() {
       }
       var statsIndex = getStatIndex(pageNumber);
       if (statsIndex !== false) {
-        var b = stats[statsIndex];
+        const b = stats[statsIndex];
         this.panel.removeChild(b.div);
         stats.splice(statsIndex, 1);
       }
@@ -494,7 +486,7 @@ var Stats = (function Stats() {
       wrapper.appendChild(title);
       wrapper.appendChild(statsDiv);
       stats.push({ pageNumber, div: wrapper });
-      stats.sort(function(a, b) {
+      stats.sort(function (a, b) {
         return a.pageNumber - b.pageNumber;
       });
       clear(this.panel);
@@ -531,7 +523,7 @@ window.PDFBug = (function PDFBugClosure() {
       }
       if (!all) {
         // Sort the tools by the order they are enabled.
-        tools.sort(function(a, b) {
+        tools.sort(function (a, b) {
           var indexA = ids.indexOf(a.id);
           indexA = indexA < 0 ? tools.length : indexA;
           var indexB = ids.indexOf(b.id);
@@ -574,8 +566,8 @@ window.PDFBug = (function PDFBugClosure() {
         panelButton.textContent = tool.name;
         panelButton.addEventListener(
           "click",
-          (function(selected) {
-            return function(event) {
+          (function (selected) {
+            return function (event) {
               event.preventDefault();
               self.selectPanel(selected);
             };

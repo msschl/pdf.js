@@ -19,7 +19,7 @@ import { getDocument } from "../../src/display/api.js";
 import { isNodeJS } from "../../src/shared/is_node.js";
 
 function getTopLeftPixel(canvasContext) {
-  let imgData = canvasContext.getImageData(0, 0, 1, 1);
+  const imgData = canvasContext.getImageData(0, 0, 1, 1);
   return {
     r: imgData.data[0],
     g: imgData.data[1],
@@ -28,14 +28,16 @@ function getTopLeftPixel(canvasContext) {
   };
 }
 
-describe("custom canvas rendering", function() {
-  let transparentGetDocumentParams = buildGetDocumentParams("transparent.pdf");
+describe("custom canvas rendering", function () {
+  const transparentGetDocumentParams = buildGetDocumentParams(
+    "transparent.pdf"
+  );
 
   let CanvasFactory;
   let loadingTask;
   let page;
 
-  beforeAll(function(done) {
+  beforeAll(function (done) {
     if (isNodeJS) {
       CanvasFactory = new NodeCanvasFactory();
     } else {
@@ -43,23 +45,23 @@ describe("custom canvas rendering", function() {
     }
     loadingTask = getDocument(transparentGetDocumentParams);
     loadingTask.promise
-      .then(function(doc) {
+      .then(function (doc) {
         return doc.getPage(1);
       })
-      .then(function(data) {
+      .then(function (data) {
         page = data;
         done();
       })
       .catch(done.fail);
   });
 
-  afterAll(function(done) {
+  afterAll(function (done) {
     CanvasFactory = null;
     page = null;
     loadingTask.destroy().then(done);
   });
 
-  it("renders to canvas with a default white background", function(done) {
+  it("renders to canvas with a default white background", function (done) {
     var viewport = page.getViewport({ scale: 1 });
     var canvasAndCtx = CanvasFactory.create(viewport.width, viewport.height);
 
@@ -68,7 +70,7 @@ describe("custom canvas rendering", function() {
       viewport,
     });
     renderTask.promise
-      .then(function() {
+      .then(function () {
         expect(getTopLeftPixel(canvasAndCtx.context)).toEqual({
           r: 255,
           g: 255,
@@ -81,7 +83,7 @@ describe("custom canvas rendering", function() {
       .catch(done.fail);
   });
 
-  it("renders to canvas with a custom background", function(done) {
+  it("renders to canvas with a custom background", function (done) {
     var viewport = page.getViewport({ scale: 1 });
     var canvasAndCtx = CanvasFactory.create(viewport.width, viewport.height);
 
@@ -91,7 +93,7 @@ describe("custom canvas rendering", function() {
       background: "rgba(255,0,0,1.0)",
     });
     renderTask.promise
-      .then(function() {
+      .then(function () {
         expect(getTopLeftPixel(canvasAndCtx.context)).toEqual({
           r: 255,
           g: 0,

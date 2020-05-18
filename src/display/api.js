@@ -63,20 +63,25 @@ const RENDERING_CANCELLED_TIMEOUT = 100; // ms
 
 /**
  * @typedef {function} IPDFStreamFactory
- * @param {DocumentInitParameters} params The document initialization
- * parameters. The "url" key is always present.
+ * @param {DocumentInitParameters} params - The document initialization
+ *   parameters. The "url" key is always present.
  * @returns {IPDFStream}
+ * @ignore
  */
 
-/** @type IPDFStreamFactory */
+/**
+ * @type IPDFStreamFactory
+ * @private
+ */
 let createPDFNetworkStream;
 
 /**
- * Sets the function that instantiates a IPDFStream as an alternative PDF data
- * transport.
- * @param {IPDFStreamFactory} pdfNetworkStreamFactory - the factory function
- * that takes document initialization parameters (including a "url") and returns
- * an instance of IPDFStream.
+ * Sets the function that instantiates an {IPDFStream} as an alternative PDF
+ * data transport.
+ * @param {IPDFStreamFactory} pdfNetworkStreamFactory - The factory function
+ *   that takes document initialization parameters (including a "url") and
+ *   returns an instance of {IPDFStream}.
+ * @ignore
  */
 function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
   createPDFNetworkStream = pdfNetworkStreamFactory;
@@ -140,6 +145,11 @@ function setPDFNetworkStreamFactory(pdfNetworkStreamFactory) {
  *   converted to OpenType fonts and loaded via font face rules. If disabled,
  *   fonts will be rendered using a built-in font renderer that constructs the
  *   glyphs with primitive path commands. The default value is `false`.
+ * @property {boolean} [fontExtraProperties] - Include additional properties,
+ *   which are unused during rendering of PDF documents, when exporting the
+ *   parsed font data from the worker-thread. This may be useful for debugging
+ *   purposes (and backwards compatibility), but note that it will lead to
+ *   increased memory usage. The default value is `false`.
  * @property {boolean} [disableRange] - Disable range request loading
  *   of PDF files. When enabled, and if the server supports partial content
  *   requests, then the PDF will be fetched in chunks.
@@ -246,6 +256,7 @@ function getDocument(src) {
   params.rangeChunkSize = params.rangeChunkSize || DEFAULT_RANGE_CHUNK_SIZE;
   params.CMapReaderFactory = params.CMapReaderFactory || DOMCMapReaderFactory;
   params.ignoreErrors = params.stopAtErrors !== true;
+  params.fontExtraProperties = params.fontExtraProperties === true;
   params.pdfBug = params.pdfBug === true;
 
   const NativeImageDecoderValues = Object.values(NativeImageDecoding);
@@ -298,12 +309,12 @@ function getDocument(src) {
   }
   const docId = task.docId;
   worker.promise
-    .then(function() {
+    .then(function () {
       if (task.destroyed) {
         throw new Error("Loading aborted");
       }
       return _fetchDocument(worker, params, rangeTransport, docId).then(
-        function(workerId) {
+        function (workerId) {
           if (task.destroyed) {
             throw new Error("Loading aborted");
           }
@@ -398,8 +409,9 @@ function _fetchDocument(worker, source, pdfDataRangeTransport, docId) {
       nativeImageDecoderSupport: source.nativeImageDecoderSupport,
       ignoreErrors: source.ignoreErrors,
       isEvalSupported: source.isEvalSupported,
+      fontExtraProperties: source.fontExtraProperties,
     })
-    .then(function(workerId) {
+    .then(function (workerId) {
       if (worker.destroyed) {
         throw new Error("Worker was destroyed");
       }
@@ -415,6 +427,7 @@ const PDFDocumentLoadingTask = (function PDFDocumentLoadingTaskClosure() {
    * (such as network requests) and provides a way to listen for completion,
    * after which individual pages can be rendered.
    */
+  // eslint-disable-next-line no-shadow
   class PDFDocumentLoadingTask {
     constructor() {
       this._capability = createPromiseCapability();
@@ -480,17 +493,6 @@ const PDFDocumentLoadingTask = (function PDFDocumentLoadingTaskClosure() {
           this._worker = null;
         }
       });
-    }
-
-    /**
-     * Registers callbacks to indicate the document loading completion.
-     * @ignore
-     */
-    then(onFulfilled, onRejected) {
-      throw new Error(
-        "Removed API method: " +
-          "PDFDocumentLoadingTask.then, use the `promise` getter instead."
-      );
     }
   }
   return PDFDocumentLoadingTask;
@@ -608,8 +610,8 @@ class PDFDocumentProxy {
   /**
    * @param {{num: number, gen: number}} ref - The page reference. Must have
    *   the `num` and `gen` properties.
-   * @returns {Promise} A promise that is resolved with the page index that is
-   *   associated with the reference.
+   * @returns {Promise} A promise that is resolved with the page index (starting
+   *   from zero) that is associated with the reference.
    */
   getPageIndex(ref) {
     return this._transport.getPageIndex(ref);
@@ -661,18 +663,26 @@ class PDFDocumentProxy {
 
   /**
    * @returns {Promise} A promise that is resolved with an {Object} containing
-   *   the viewer preferences.
+   *   the viewer preferences, or `null` when no viewer preferences are present
+   *   in the PDF file.
    */
   getViewerPreferences() {
     return this._transport.getViewerPreferences();
   }
 
   /**
-   * @returns {Promise} A promise that is resolved with an {Array} containing
-   *   the destination, or `null` when no open action is present in the PDF.
+   * @returns {Promise} A promise that is resolved with an {Object} containing
+   *   the currently supported actions, or `null` when no OpenAction exists.
    */
+  getOpenAction() {
+    return this._transport.getOpenAction();
+  }
+
   getOpenActionDestination() {
-    return this._transport.getOpenActionDestination();
+    deprecated("getOpenActionDestination, use getOpenAction instead.");
+    return this.getOpenAction().then(function (openAction) {
+      return openAction && openAction.dest ? openAction.dest : null;
+    });
   }
 
   /**
@@ -758,10 +768,16 @@ class PDFDocumentProxy {
   }
 
   /**
-   * Cleans up resources allocated by the document, e.g. created `@font-face`.
+   * Cleans up resources allocated by the document, on both the main- and
+   * worker-threads.
+   *
+   * NOTE: Do not, under any circumstances, call this method when rendering is
+   *       currently ongoing since that may lead to rendering errors.
+   *
+   * @returns {Promise} A promise that is resolved when clean-up has finished.
    */
   cleanup() {
-    this._transport.startCleanup();
+    return this._transport.startCleanup();
   }
 
   /**
@@ -896,7 +912,7 @@ class PDFDocumentProxy {
  */
 class PDFPageProxy {
   constructor(pageIndex, pageInfo, transport, pdfBug = false) {
-    this.pageIndex = pageIndex;
+    this._pageIndex = pageIndex;
     this._pageInfo = pageInfo;
     this._transport = transport;
     this._stats = pdfBug ? new StatTimer() : null;
@@ -914,7 +930,7 @@ class PDFPageProxy {
    * @type {number} Page number of the page. First page is 1.
    */
   get pageNumber() {
-    return this.pageIndex + 1;
+    return this._pageIndex + 1;
   }
 
   /**
@@ -959,15 +975,6 @@ class PDFPageProxy {
     offsetY = 0,
     dontFlip = false,
   } = {}) {
-    if (
-      typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("GENERIC") &&
-      (arguments.length > 1 || typeof arguments[0] === "number")
-    ) {
-      throw new Error(
-        "PDFPageProxy.getViewport is called with obsolete arguments."
-      );
-    }
     return new PageViewport({
       viewBox: this.view,
       scale,
@@ -986,7 +993,7 @@ class PDFPageProxy {
   getAnnotations({ intent = null } = {}) {
     if (!this.annotationsPromise || this.annotationsIntent !== intent) {
       this.annotationsPromise = this._transport.getAnnotations(
-        this.pageIndex,
+        this._pageIndex,
         intent
       );
       this.annotationsIntent = intent;
@@ -1050,7 +1057,7 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
       this._pumpOperatorList({
-        pageIndex: this.pageNumber - 1,
+        pageIndex: this._pageIndex,
         intent: renderingIntent,
         renderInteractiveForms: renderInteractiveForms === true,
       });
@@ -1098,7 +1105,7 @@ class PDFPageProxy {
       objs: this.objs,
       commonObjs: this.commonObjs,
       operatorList: intentState.operatorList,
-      pageNumber: this.pageNumber,
+      pageIndex: this._pageIndex,
       canvasFactory: canvasFactoryInstance,
       webGLContext,
       useRequestAnimationFrame: renderingIntent !== "print",
@@ -1167,7 +1174,7 @@ class PDFPageProxy {
         this._stats.time("Page Request");
       }
       this._pumpOperatorList({
-        pageIndex: this.pageIndex,
+        pageIndex: this._pageIndex,
         intent: renderingIntent,
       });
     }
@@ -1187,7 +1194,7 @@ class PDFPageProxy {
     return this._transport.messageHandler.sendWithStream(
       "GetTextContent",
       {
-        pageIndex: this.pageNumber - 1,
+        pageIndex: this._pageIndex,
         normalizeWhitespace: normalizeWhitespace === true,
         combineTextItems: disableCombineTextItems !== true,
       },
@@ -1208,9 +1215,9 @@ class PDFPageProxy {
   getTextContent(params = {}) {
     const readableStream = this.streamTextContent(params);
 
-    return new Promise(function(resolve, reject) {
+    return new Promise(function (resolve, reject) {
       function pump() {
-        reader.read().then(function({ value, done }) {
+        reader.read().then(function ({ value, done }) {
           if (done) {
             resolve(textContent);
             return;
@@ -1236,7 +1243,7 @@ class PDFPageProxy {
    */
   _destroy() {
     this.destroyed = true;
-    this._transport.pageCache[this.pageIndex] = null;
+    this._transport.pageCache[this._pageIndex] = null;
 
     const waitOn = [];
     Object.keys(this.intentStates).forEach(intent => {
@@ -1251,9 +1258,9 @@ class PDFPageProxy {
         // Avoid errors below, since the renderTasks are just stubs.
         return;
       }
-      intentState.renderTasks.forEach(function(renderTask) {
+      intentState.renderTasks.forEach(function (renderTask) {
         const renderCompleted = renderTask.capability.promise.catch(
-          function() {}
+          function () {}
         ); // ignoring failures
         waitOn.push(renderCompleted);
         renderTask.cancel();
@@ -1269,10 +1276,11 @@ class PDFPageProxy {
    * Cleans up resources allocated by the page.
    * @param {boolean} [resetStats] - Reset page stats, if enabled.
    *   The default value is `false`.
+   * @returns {boolean} Indicating if clean-up was successfully run.
    */
   cleanup(resetStats = false) {
     this.pendingCleanup = true;
-    this._tryCleanup(resetStats);
+    return this._tryCleanup(resetStats);
   }
 
   /**
@@ -1290,7 +1298,7 @@ class PDFPageProxy {
         );
       })
     ) {
-      return;
+      return false;
     }
 
     Object.keys(this.intentStates).forEach(intent => {
@@ -1302,6 +1310,7 @@ class PDFPageProxy {
       this._stats = new StatTimer();
     }
     this.pendingCleanup = false;
+    return true;
   }
 
   /**
@@ -1484,10 +1493,7 @@ class LoopbackPort {
       if ((buffer = value.buffer) && isArrayBuffer(buffer)) {
         // We found object with ArrayBuffer (typed array).
         const transferable = transfers && transfers.includes(buffer);
-        if (value === buffer) {
-          // Special case when we are faking typed arrays in compatibility.js.
-          result = value;
-        } else if (transferable) {
+        if (transferable) {
           result = new value.constructor(
             buffer,
             value.byteOffset,
@@ -1624,7 +1630,7 @@ const PDFWorker = (function PDFWorkerClosure() {
     }
     fakeWorkerCapability = createPromiseCapability();
 
-    const loader = async function() {
+    const loader = async function () {
       const mainWorkerMessageHandler = getMainThreadWorkerMessageHandler();
 
       if (mainWorkerMessageHandler) {
@@ -1639,7 +1645,6 @@ const PDFWorker = (function PDFWorkerClosure() {
         return worker.WorkerMessageHandler;
       }
       if (
-        typeof PDFJSDev !== "undefined" &&
         PDFJSDev.test("GENERIC") &&
         isNodeJS &&
         // eslint-disable-next-line no-undef
@@ -1683,6 +1688,7 @@ const PDFWorker = (function PDFWorkerClosure() {
    * thread to the worker thread and vice versa. If the creation of a web
    * worker is not possible, a "fake" worker will be used instead.
    */
+  // eslint-disable-next-line no-shadow
   class PDFWorker {
     /**
      * @param {PDFWorkerParameters} params - Worker initialization parameters.
@@ -1729,7 +1735,7 @@ const PDFWorker = (function PDFWorkerClosure() {
     _initializeFromPort(port) {
       this._port = port;
       this._messageHandler = new MessageHandler("main", "worker", port);
-      this._messageHandler.on("ready", function() {
+      this._messageHandler.on("ready", function () {
         // Ignoring 'ready' event -- MessageHandler shall be already initialized
         // and ready to accept the messages.
       });
@@ -1829,7 +1835,9 @@ const PDFWorker = (function PDFWorkerClosure() {
           });
 
           const sendTest = () => {
-            let testObj = new Uint8Array([this.postMessageTransfers ? 255 : 0]);
+            const testObj = new Uint8Array([
+              this.postMessageTransfers ? 255 : 0,
+            ]);
             // Some versions of Opera throw a DATA_CLONE_ERR on serializing the
             // typed array. Also, checking if we can use transfers.
             try {
@@ -1882,6 +1890,10 @@ const PDFWorker = (function PDFWorkerClosure() {
           const messageHandler = new MessageHandler(id, id + "_worker", port);
           this._messageHandler = messageHandler;
           this._readyCapability.resolve();
+          // Send global setting, e.g. verbosity level.
+          messageHandler.send("configure", {
+            verbosity: this.verbosity,
+          });
         })
         .catch(reason => {
           this._readyCapability.reject(
@@ -1980,7 +1992,7 @@ class WorkerTransport {
     const waitOn = [];
     // We need to wait for all renderings to be completed, e.g.
     // timeout/rAF can take a long time.
-    this.pageCache.forEach(function(page) {
+    this.pageCache.forEach(function (page) {
       if (page) {
         waitOn.push(page._destroy());
       }
@@ -2011,7 +2023,10 @@ class WorkerTransport {
     const { messageHandler, loadingTask } = this;
 
     messageHandler.on("GetReader", (data, sink) => {
-      assert(this._networkStream);
+      assert(
+        this._networkStream,
+        "GetReader - no `IPDFStream` instance available."
+      );
       this._fullReader = this._networkStream.getFullReader();
       this._fullReader.onProgress = evt => {
         this._lastProgress = {
@@ -2022,12 +2037,15 @@ class WorkerTransport {
       sink.onPull = () => {
         this._fullReader
           .read()
-          .then(function({ value, done }) {
+          .then(function ({ value, done }) {
             if (done) {
               sink.close();
               return;
             }
-            assert(isArrayBuffer(value));
+            assert(
+              isArrayBuffer(value),
+              "GetReader - expected an ArrayBuffer."
+            );
             // Enqueue data chunk into sink, and transfer it
             // to other side as `Transferable` object.
             sink.enqueue(new Uint8Array(value), 1, [value]);
@@ -2073,7 +2091,10 @@ class WorkerTransport {
     });
 
     messageHandler.on("GetRangeReader", (data, sink) => {
-      assert(this._networkStream);
+      assert(
+        this._networkStream,
+        "GetRangeReader - no `IPDFStream` instance available."
+      );
       const rangeReader = this._networkStream.getRangeReader(
         data.begin,
         data.end
@@ -2097,12 +2118,15 @@ class WorkerTransport {
       sink.onPull = () => {
         rangeReader
           .read()
-          .then(function({ value, done }) {
+          .then(function ({ value, done }) {
             if (done) {
               sink.close();
               return;
             }
-            assert(isArrayBuffer(value));
+            assert(
+              isArrayBuffer(value),
+              "GetRangeReader - expected an ArrayBuffer."
+            );
             sink.enqueue(new Uint8Array(value), 1, [value]);
           })
           .catch(reason => {
@@ -2120,7 +2144,7 @@ class WorkerTransport {
       loadingTask._capability.resolve(new PDFDocumentProxy(pdfInfo, this));
     });
 
-    messageHandler.on("DocException", function(ex) {
+    messageHandler.on("DocException", function (ex) {
       let reason;
       switch (ex.name) {
         case "PasswordException":
@@ -2232,20 +2256,22 @@ class WorkerTransport {
             fontRegistry,
           });
 
-          this.fontLoader.bind(font).then(
-            () => {
+          this.fontLoader
+            .bind(font)
+            .catch(reason => {
+              return messageHandler.sendWithPromise("FontFallback", { id });
+            })
+            .finally(() => {
+              if (!params.fontExtraProperties && font.data) {
+                // Immediately release the `font.data` property once the font
+                // has been attached to the DOM, since it's no longer needed,
+                // rather than waiting for a `PDFDocumentProxy.cleanup` call.
+                // Since `font.data` could be very large, e.g. in some cases
+                // multiple megabytes, this will help reduce memory usage.
+                font.data = null;
+              }
               this.commonObjs.resolve(id, font);
-            },
-            reason => {
-              messageHandler
-                .sendWithPromise("FontFallback", {
-                  id,
-                })
-                .finally(() => {
-                  this.commonObjs.resolve(id, font);
-                });
-            }
-          );
+            });
           break;
         case "FontPath":
         case "FontType3Res":
@@ -2272,10 +2298,10 @@ class WorkerTransport {
         case "JpegStream":
           return new Promise((resolve, reject) => {
             const img = new Image();
-            img.onload = function() {
+            img.onload = function () {
               resolve(img);
             };
-            img.onerror = function() {
+            img.onerror = function () {
               // Note that when the browser image loading/decoding fails,
               // we'll fallback to the built-in PDF.js JPEG decoder; see
               // `PartialEvaluator.buildPaintImageXObject` in the
@@ -2326,7 +2352,7 @@ class WorkerTransport {
       this._onUnsupportedFeature.bind(this)
     );
 
-    messageHandler.on("JpegDecode", data => {
+    messageHandler.on("JpegDecode", ([imageUrl, components]) => {
       if (this.destroyed) {
         return Promise.reject(new Error("Worker was destroyed"));
       }
@@ -2337,16 +2363,15 @@ class WorkerTransport {
         return Promise.reject(new Error('"document" is not defined.'));
       }
 
-      const [imageUrl, components] = data;
       if (components !== 3 && components !== 1) {
         return Promise.reject(
           new Error("Only 3 components or 1 component can be returned")
         );
       }
 
-      return new Promise(function(resolve, reject) {
+      return new Promise(function (resolve, reject) {
         const img = new Image();
-        img.onload = function() {
+        img.onload = function () {
           const { width, height } = img;
           const size = width * height;
           const rgbaLength = size * 4;
@@ -2380,7 +2405,7 @@ class WorkerTransport {
           tmpCanvas = null;
           tmpCtx = null;
         };
-        img.onerror = function() {
+        img.onerror = function () {
           reject(new Error("JpegDecode failed to load image"));
 
           // Always remember to release the image data if errors occurred.
@@ -2405,10 +2430,10 @@ class WorkerTransport {
         fetched = true;
 
         this.CMapReaderFactory.fetch(data)
-          .then(function(builtInCMap) {
+          .then(function (builtInCMap) {
             sink.enqueue(builtInCMap, 1, [builtInCMap.cMapData.buffer]);
           })
-          .catch(function(reason) {
+          .catch(function (reason) {
             sink.error(reason);
           });
       };
@@ -2467,7 +2492,7 @@ class WorkerTransport {
       .sendWithPromise("GetPageIndex", {
         ref,
       })
-      .catch(function(reason) {
+      .catch(function (reason) {
         return Promise.reject(new Error(reason));
       });
   }
@@ -2508,11 +2533,8 @@ class WorkerTransport {
     return this.messageHandler.sendWithPromise("GetViewerPreferences", null);
   }
 
-  getOpenActionDestination() {
-    return this.messageHandler.sendWithPromise(
-      "GetOpenActionDestination",
-      null
-    );
+  getOpenAction() {
+    return this.messageHandler.sendWithPromise("GetOpenAction", null);
   }
 
   getAttachments() {
@@ -2550,11 +2572,17 @@ class WorkerTransport {
   }
 
   startCleanup() {
-    this.messageHandler.sendWithPromise("Cleanup", null).then(() => {
+    return this.messageHandler.sendWithPromise("Cleanup", null).then(() => {
       for (let i = 0, ii = this.pageCache.length; i < ii; i++) {
         const page = this.pageCache[i];
         if (page) {
-          page.cleanup();
+          const cleanupSuccessful = page.cleanup();
+
+          if (!cleanupSuccessful) {
+            throw new Error(
+              `startCleanup: Page ${i + 1} is currently rendering.`
+            );
+          }
         }
       }
       this.commonObjs.clear();
@@ -2687,17 +2715,6 @@ class RenderTask {
   cancel() {
     this._internalRenderTask.cancel();
   }
-
-  /**
-   * Registers callbacks to indicate the rendering task completion.
-   * @ignore
-   */
-  then(onFulfilled, onRejected) {
-    throw new Error(
-      "Removed API method: " +
-        "RenderTask.then, use the `promise` getter instead."
-    );
-  }
 }
 
 /**
@@ -2707,6 +2724,7 @@ class RenderTask {
 const InternalRenderTask = (function InternalRenderTaskClosure() {
   const canvasInRendering = new WeakSet();
 
+  // eslint-disable-next-line no-shadow
   class InternalRenderTask {
     constructor({
       callback,
@@ -2714,7 +2732,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       objs,
       commonObjs,
       operatorList,
-      pageNumber,
+      pageIndex,
       canvasFactory,
       webGLContext,
       useRequestAnimationFrame = false,
@@ -2726,7 +2744,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       this.commonObjs = commonObjs;
       this.operatorListIdx = null;
       this.operatorList = operatorList;
-      this.pageNumber = pageNumber;
+      this._pageIndex = pageIndex;
       this.canvasFactory = canvasFactory;
       this.webGLContext = webGLContext;
       this._pdfBug = pdfBug;
@@ -2766,7 +2784,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
         globalThis.StepperManager &&
         globalThis.StepperManager.enabled
       ) {
-        this.stepper = globalThis.StepperManager.create(this.pageNumber - 1);
+        this.stepper = globalThis.StepperManager.create(this._pageIndex);
         this.stepper.init(this.operatorList);
         this.stepper.nextBreakPoint = this.stepper.getNextBreakPoint();
       }
@@ -2811,7 +2829,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
       this.callback(
         error ||
           new RenderingCancelledException(
-            `Rendering cancelled, page ${this.pageNumber}`,
+            `Rendering cancelled, page ${this._pageIndex + 1}`,
             "canvas"
           )
       );
@@ -2853,9 +2871,7 @@ const InternalRenderTask = (function InternalRenderTaskClosure() {
           this._nextBound().catch(this.cancel.bind(this));
         });
       } else {
-        Promise.resolve()
-          .then(this._nextBound)
-          .catch(this.cancel.bind(this));
+        Promise.resolve().then(this._nextBound).catch(this.cancel.bind(this));
       }
     }
 

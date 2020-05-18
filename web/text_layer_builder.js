@@ -13,7 +13,6 @@
  * limitations under the License.
  */
 
-import { getGlobalEventBus } from "./ui_utils.js";
 import { renderTextLayer } from "pdfjs-lib";
 
 const EXPAND_DIVS_TIMEOUT = 300; // ms
@@ -45,7 +44,7 @@ class TextLayerBuilder {
     enhanceTextSelection = false,
   }) {
     this.textLayerDiv = textLayerDiv;
-    this.eventBus = eventBus || getGlobalEventBus();
+    this.eventBus = eventBus;
     this.textContent = null;
     this.textContentItemsStr = [];
     this.textContentStream = null;
@@ -112,7 +111,7 @@ class TextLayerBuilder {
         this._finishRendering();
         this._updateMatches();
       },
-      function(reason) {
+      function (reason) {
         // Cancelled or failed to render text layer; skipping errors.
       }
     );
@@ -123,7 +122,7 @@ class TextLayerBuilder {
           this._updateMatches();
         }
       };
-      this.eventBus.on(
+      this.eventBus._on(
         "updatetextlayermatches",
         this._onUpdateTextLayerMatches
       );
@@ -139,7 +138,7 @@ class TextLayerBuilder {
       this.textLayerRenderTask = null;
     }
     if (this._onUpdateTextLayerMatches) {
-      this.eventBus.off(
+      this.eventBus._off(
         "updatetextlayermatches",
         this._onUpdateTextLayerMatches
       );
@@ -373,8 +372,7 @@ class TextLayerBuilder {
       if (this.enhanceTextSelection && this.textLayerRenderTask) {
         this.textLayerRenderTask.expandTextDivs(true);
         if (
-          (typeof PDFJSDev === "undefined" ||
-            !PDFJSDev.test("FIREFOX || MOZCENTRAL")) &&
+          (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) &&
           expandDivsTimer
         ) {
           clearTimeout(expandDivsTimer);
@@ -387,10 +385,7 @@ class TextLayerBuilder {
       if (!end) {
         return;
       }
-      if (
-        typeof PDFJSDev === "undefined" ||
-        !PDFJSDev.test("FIREFOX || MOZCENTRAL")
-      ) {
+      if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
         // On non-Firefox browsers, the selection will feel better if the height
         // of the `endOfContent` div is adjusted to start at mouse click
         // location. This avoids flickering when the selection moves up.
@@ -414,10 +409,7 @@ class TextLayerBuilder {
 
     div.addEventListener("mouseup", () => {
       if (this.enhanceTextSelection && this.textLayerRenderTask) {
-        if (
-          typeof PDFJSDev === "undefined" ||
-          !PDFJSDev.test("FIREFOX || MOZCENTRAL")
-        ) {
+        if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
           expandDivsTimer = setTimeout(() => {
             if (this.textLayerRenderTask) {
               this.textLayerRenderTask.expandTextDivs(false);
@@ -434,10 +426,7 @@ class TextLayerBuilder {
       if (!end) {
         return;
       }
-      if (
-        typeof PDFJSDev === "undefined" ||
-        !PDFJSDev.test("FIREFOX || MOZCENTRAL")
-      ) {
+      if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
         end.style.top = "";
       }
       end.classList.remove("active");
@@ -454,19 +443,22 @@ class DefaultTextLayerFactory {
    * @param {number} pageIndex
    * @param {PageViewport} viewport
    * @param {boolean} enhanceTextSelection
+   * @param {EventBus} eventBus
    * @returns {TextLayerBuilder}
    */
   createTextLayerBuilder(
     textLayerDiv,
     pageIndex,
     viewport,
-    enhanceTextSelection = false
+    enhanceTextSelection = false,
+    eventBus
   ) {
     return new TextLayerBuilder({
       textLayerDiv,
       pageIndex,
       viewport,
       enhanceTextSelection,
+      eventBus,
     });
   }
 }

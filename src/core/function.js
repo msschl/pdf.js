@@ -17,18 +17,11 @@ import {
   FormatError,
   info,
   isBool,
-  isEvalSupported,
-  shadow,
+  IsEvalSupportedCached,
   unreachable,
 } from "../shared/util.js";
 import { isDict, isStream } from "./primitives.js";
 import { PostScriptLexer, PostScriptParser } from "./ps_parser.js";
-
-let IsEvalSupportedCached = {
-  get value() {
-    return shadow(this, "value", isEvalSupported());
-  },
-};
 
 class PDFFunctionFactory {
   constructor({ xref, isEvalSupported = true }) {
@@ -62,8 +55,8 @@ function toNumberArray(arr) {
     if (typeof arr[i] !== "number") {
       // Non-number is found -- convert all items to numbers.
       const result = new Array(length);
-      for (let i = 0; i < length; i++) {
-        result[i] = +arr[i];
+      for (let j = 0; j < length; j++) {
+        result[j] = +arr[j];
       }
       return result;
     }
@@ -90,7 +83,7 @@ var PDFFunction = (function PDFFunctionClosure() {
       var codeSize = 0;
       var codeBuf = 0;
       // 32 is a valid bps so shifting won't work
-      var sampleMul = 1.0 / (Math.pow(2.0, bps) - 1);
+      var sampleMul = 1.0 / (2.0 ** bps - 1);
 
       var strBytes = stream.getBytes((length * bps + 7) / 8);
       var strIdx = 0;
@@ -150,7 +143,7 @@ var PDFFunction = (function PDFFunctionClosure() {
     },
 
     parse({ xref, isEvalSupported, fn }) {
-      let IR = this.getIR({ xref, isEvalSupported, fn });
+      const IR = this.getIR({ xref, isEvalSupported, fn });
       return this.fromIR({ xref, isEvalSupported, IR });
     },
 
@@ -166,7 +159,7 @@ var PDFFunction = (function PDFFunctionClosure() {
           this.parse({ xref, isEvalSupported, fn: xref.fetchIfRef(fnObj[j]) })
         );
       }
-      return function(src, srcOffset, dest, destOffset) {
+      return function (src, srcOffset, dest, destOffset) {
         for (var i = 0, ii = fnArray.length; i < ii; i++) {
           fnArray[i](src, srcOffset, dest, destOffset + i);
         }
@@ -234,7 +227,7 @@ var PDFFunction = (function PDFFunctionClosure() {
         samples,
         size,
         outputSize,
-        Math.pow(2, bps) - 1,
+        2 ** bps - 1,
         range,
       ];
     },
@@ -365,7 +358,7 @@ var PDFFunction = (function PDFFunctionClosure() {
         dest,
         destOffset
       ) {
-        var x = n === 1 ? src[srcOffset] : Math.pow(src[srcOffset], n);
+        var x = n === 1 ? src[srcOffset] : src[srcOffset] ** n;
 
         for (var j = 0; j < length; ++j) {
           dest[destOffset + j] = c0[j] + x * diff[j];
@@ -480,7 +473,7 @@ var PDFFunction = (function PDFFunctionClosure() {
       var code = IR[3];
 
       if (isEvalSupported && IsEvalSupportedCached.value) {
-        let compiled = new PostScriptCompiler().compile(code, domain, range);
+        const compiled = new PostScriptCompiler().compile(code, domain, range);
         if (compiled) {
           // Compiled function consists of simple expressions such as addition,
           // subtraction, Math.max, and also contains 'var' and 'return'
@@ -572,6 +565,8 @@ function isPDFFunction(v) {
 
 var PostScriptStack = (function PostScriptStackClosure() {
   var MAX_STACK_SIZE = 100;
+
+  // eslint-disable-next-line no-shadow
   function PostScriptStack(initialStack) {
     this.stack = !initialStack
       ? []
@@ -632,6 +627,7 @@ var PostScriptStack = (function PostScriptStackClosure() {
   return PostScriptStack;
 })();
 var PostScriptEvaluator = (function PostScriptEvaluatorClosure() {
+  // eslint-disable-next-line no-shadow
   function PostScriptEvaluator(operators) {
     this.operators = operators;
   }
@@ -733,7 +729,7 @@ var PostScriptEvaluator = (function PostScriptEvaluatorClosure() {
           case "exp":
             b = stack.pop();
             a = stack.pop();
-            stack.push(Math.pow(a, b));
+            stack.push(a ** b);
             break;
           case "false":
             stack.push(false);
@@ -877,7 +873,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
   function AstNode(type) {
     this.type = type;
   }
-  AstNode.prototype.visit = function(visitor) {
+  AstNode.prototype.visit = function (visitor) {
     unreachable("abstract method");
   };
 
@@ -888,7 +884,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.max = max;
   }
   AstArgument.prototype = Object.create(AstNode.prototype);
-  AstArgument.prototype.visit = function(visitor) {
+  AstArgument.prototype.visit = function (visitor) {
     visitor.visitArgument(this);
   };
 
@@ -899,7 +895,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.max = number;
   }
   AstLiteral.prototype = Object.create(AstNode.prototype);
-  AstLiteral.prototype.visit = function(visitor) {
+  AstLiteral.prototype.visit = function (visitor) {
     visitor.visitLiteral(this);
   };
 
@@ -912,7 +908,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.max = max;
   }
   AstBinaryOperation.prototype = Object.create(AstNode.prototype);
-  AstBinaryOperation.prototype.visit = function(visitor) {
+  AstBinaryOperation.prototype.visit = function (visitor) {
     visitor.visitBinaryOperation(this);
   };
 
@@ -923,7 +919,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.max = max;
   }
   AstMin.prototype = Object.create(AstNode.prototype);
-  AstMin.prototype.visit = function(visitor) {
+  AstMin.prototype.visit = function (visitor) {
     visitor.visitMin(this);
   };
 
@@ -934,7 +930,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.max = max;
   }
   AstVariable.prototype = Object.create(AstNode.prototype);
-  AstVariable.prototype.visit = function(visitor) {
+  AstVariable.prototype.visit = function (visitor) {
     visitor.visitVariable(this);
   };
 
@@ -944,7 +940,7 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     this.arg = arg;
   }
   AstVariableDefinition.prototype = Object.create(AstNode.prototype);
-  AstVariableDefinition.prototype.visit = function(visitor) {
+  AstVariableDefinition.prototype.visit = function (visitor) {
     visitor.visitVariableDefinition(this);
   };
 
@@ -1091,22 +1087,22 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
     return new AstMin(num1, max);
   }
 
+  // eslint-disable-next-line no-shadow
   function PostScriptCompiler() {}
   PostScriptCompiler.prototype = {
     compile: function PostScriptCompiler_compile(code, domain, range) {
       var stack = [];
-      var i, ii;
       var instructions = [];
       var inputSize = domain.length >> 1,
         outputSize = range.length >> 1;
       var lastRegister = 0;
       var n, j;
       var num1, num2, ast1, ast2, tmpVar, item;
-      for (i = 0; i < inputSize; i++) {
+      for (let i = 0; i < inputSize; i++) {
         stack.push(new AstArgument(i, domain[i * 2], domain[i * 2 + 1]));
       }
 
-      for (i = 0, ii = code.length; i < ii; i++) {
+      for (let i = 0, ii = code.length; i < ii; i++) {
         item = code[i];
         if (typeof item === "number") {
           stack.push(new AstLiteral(item));
@@ -1249,12 +1245,12 @@ var PostScriptCompiler = (function PostScriptCompilerClosure() {
       }
 
       var result = [];
-      instructions.forEach(function(instruction) {
+      instructions.forEach(function (instruction) {
         var statementBuilder = new ExpressionBuilderVisitor();
         instruction.visit(statementBuilder);
         result.push(statementBuilder.toString());
       });
-      stack.forEach(function(expr, i) {
+      stack.forEach(function (expr, i) {
         var statementBuilder = new ExpressionBuilderVisitor();
         expr.visit(statementBuilder);
         var min = range[i * 2],

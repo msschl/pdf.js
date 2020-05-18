@@ -38,6 +38,7 @@
     "no-unsanitized/method": "error",
     "no-unsanitized/property": "error",
     "unicorn/no-array-instanceof": "error",
+    "unicorn/prefer-starts-ends-with": "error",
 
     // Possible errors
     "for-direction": "error",
@@ -64,7 +65,7 @@
     "no-unreachable": "error",
     "no-unsafe-finally": "error",
     "no-unsafe-negation": "error",
-    "use-isnan": "error",
+    "use-isnan": ["error", { "enforceForIndexOf": true, }],
     "valid-typeof": ["error", { "requireStringLiterals": true, }],
 
     // Best Practices
@@ -74,7 +75,10 @@
     }],
     "consistent-return": "error",
     "curly": ["error", "all"],
+    "default-case-last": "error",
+    "dot-notation": "error",
     "eqeqeq": ["error", "always"],
+    "grouped-accessor-pairs": ["error", "getBeforeSet"],
     "no-caller": "error",
     "no-else-return": "error",
     "no-empty-pattern": "error",
@@ -118,14 +122,17 @@
     "no-catch-shadow": "error",
     "no-delete-var": "error",
     "no-label-var": "error",
+    "no-shadow": "error",
     "no-shadow-restricted-names": "error",
-    "no-shadow": "off",
     "no-undef-init": "error",
     "no-undef": ["error", { "typeof": true, }],
     "no-unused-vars": ["error", {
       "vars": "local",
       "args": "none",
     }],
+
+    // Node.js and CommonJS
+    "no-buffer-constructor": "error",
 
     // Stylistic Issues
     "lines-between-class-members": ["error", "always"],
@@ -137,9 +144,28 @@
     "new-cap": ["error", { "newIsCap": true, "capIsNew": false, }],
     "no-array-constructor": "error",
     "no-multiple-empty-lines": ["error", { "max": 1, "maxEOF": 0, "maxBOF": 1, }],
-    "no-nested-ternary": "off",
+    "no-nested-ternary": "error",
     "no-new-object": "error",
+    "no-restricted-syntax": ["error",
+      {
+        "selector": "CallExpression[callee.name='assert'][arguments.length!=2]",
+        "message": "`assert()` must always be invoked with two arguments.",
+      },
+      {
+        "selector": "NewExpression[callee.name='Cmd']",
+        "message": "Use `Cmd.get()` rather than `new Cmd()`.",
+      },
+      {
+        "selector": "NewExpression[callee.name='Name']",
+        "message": "Use `Name.get()` rather than `new Name()`.",
+      },
+      {
+        "selector": "NewExpression[callee.name='Ref']",
+        "message": "Use `Ref.get()` rather than `new Ref()`.",
+      },
+    ],
     "no-unneeded-ternary": "error",
+    "prefer-exponentiation-operator": "error",
     "spaced-comment": ["error", "always", {
       "block": {
         "balanced": true,
@@ -161,7 +187,7 @@
     "object-shorthand": ["error", "always", {
       "avoidQuotes": true,
     }],
-    "prefer-const": "off",
+    "prefer-const": "error",
     "sort-imports": ["error", {
       "ignoreCase": true,
     }],

@@ -16,8 +16,8 @@
 import { PredictorStream, Stream } from "../../src/core/stream.js";
 import { Dict } from "../../src/core/primitives.js";
 
-describe("stream", function() {
-  beforeEach(function() {
+describe("stream", function () {
+  beforeEach(function () {
     jasmine.addMatchers({
       toMatchTypedArray(util, customEqualityTesters) {
         return {
@@ -47,8 +47,8 @@ describe("stream", function() {
       },
     });
   });
-  describe("PredictorStream", function() {
-    it("should decode simple predictor data", function() {
+  describe("PredictorStream", function () {
+    it("should decode simple predictor data", function () {
       var dict = new Dict();
       dict.set("Predictor", 12);
       dict.set("Colors", 1);
@@ -69,7 +69,7 @@ describe("stream", function() {
       );
 
       predictor.reset();
-      let clampedResult = predictor.getBytes(6, /* forceClamped = */ true);
+      const clampedResult = predictor.getBytes(6, /* forceClamped = */ true);
       expect(clampedResult).toEqual(
         new Uint8ClampedArray([100, 3, 101, 2, 102, 1])
       );

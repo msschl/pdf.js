@@ -240,8 +240,8 @@ class CMap {
   }
 
   mapBfRangeToArray(low, high, array) {
-    let i = 0,
-      ii = array.length;
+    const ii = array.length;
+    let i = 0;
     while (low <= high && i < ii) {
       this._map[low] = array[i++];
       ++low;
@@ -267,8 +267,8 @@ class CMap {
     // indices in the *billions*. For such tables we use for..in, which isn't
     // ideal because it stringifies the indices for all present elements, but
     // it does avoid iterating over every undefined entry.
-    let map = this._map;
-    let length = map.length;
+    const map = this._map;
+    const length = map.length;
     if (length <= 0x10000) {
       for (let i = 0; i < length; i++) {
         if (map[i] !== undefined) {
@@ -276,7 +276,7 @@ class CMap {
         }
       }
     } else {
-      for (let i in map) {
+      for (const i in map) {
         callback(i, map[i]);
       }
     }
@@ -289,7 +289,7 @@ class CMap {
     if (map.length <= 0x10000) {
       return map.indexOf(value);
     }
-    for (let charCode in map) {
+    for (const charCode in map) {
       if (map[charCode] === value) {
         return charCode | 0;
       }
@@ -530,7 +530,7 @@ var BinaryCMapReader = (function BinaryCMapReaderClosure() {
   };
 
   function processBinaryCMap(data, cMap, extend) {
-    return new Promise(function(resolve, reject) {
+    return new Promise(function (resolve, reject) {
       var stream = new BinaryCMapStream(data);
       var header = stream.readByte();
       cMap.vertical = !!(header & 1);
@@ -713,6 +713,7 @@ var BinaryCMapReader = (function BinaryCMapReaderClosure() {
     });
   }
 
+  // eslint-disable-next-line no-shadow
   function BinaryCMapReader() {}
 
   BinaryCMapReader.prototype = {
@@ -933,7 +934,9 @@ var CMapFactory = (function CMapFactoryClosure() {
   }
 
   function extendCMap(cMap, fetchBuiltInCMap, useCMap) {
-    return createBuiltInCMap(useCMap, fetchBuiltInCMap).then(function(newCMap) {
+    return createBuiltInCMap(useCMap, fetchBuiltInCMap).then(function (
+      newCMap
+    ) {
       cMap.useCMap = newCMap;
       // If there aren't any code space ranges defined clone all the parent ones
       // into this cMap.
@@ -946,7 +949,7 @@ var CMapFactory = (function CMapFactoryClosure() {
       }
       // Merge the map into the current one, making sure not to override
       // any previously defined entries.
-      cMap.useCMap.forEach(function(key, value) {
+      cMap.useCMap.forEach(function (key, value) {
         if (!cMap.contains(key)) {
           cMap.mapOne(key, cMap.useCMap.lookup(key));
         }
@@ -971,13 +974,13 @@ var CMapFactory = (function CMapFactoryClosure() {
       );
     }
 
-    return fetchBuiltInCMap(name).then(function(data) {
+    return fetchBuiltInCMap(name).then(function (data) {
       var cMapData = data.cMapData,
         compressionType = data.compressionType;
       var cMap = new CMap(true);
 
       if (compressionType === CMapCompressionType.BINARY) {
-        return new BinaryCMapReader().process(cMapData, cMap, function(
+        return new BinaryCMapReader().process(cMapData, cMap, function (
           useCMap
         ) {
           return extendCMap(cMap, fetchBuiltInCMap, useCMap);
@@ -996,7 +999,7 @@ var CMapFactory = (function CMapFactoryClosure() {
   }
 
   return {
-    create(params) {
+    async create(params) {
       var encoding = params.encoding;
       var fetchBuiltInCMap = params.fetchBuiltInCMap;
       var useCMap = params.useCMap;
@@ -1006,7 +1009,7 @@ var CMapFactory = (function CMapFactoryClosure() {
       } else if (isStream(encoding)) {
         var cMap = new CMap();
         var lexer = new Lexer(encoding);
-        return parseCMap(cMap, lexer, fetchBuiltInCMap, useCMap).then(function(
+        return parseCMap(cMap, lexer, fetchBuiltInCMap, useCMap).then(function (
           parsedCMap
         ) {
           if (parsedCMap.isIdentityCMap) {
@@ -1015,7 +1018,7 @@ var CMapFactory = (function CMapFactoryClosure() {
           return parsedCMap;
         });
       }
-      return Promise.reject(new Error("Encoding required."));
+      throw new Error("Encoding required.");
     },
   };
 })();

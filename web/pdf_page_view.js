@@ -17,7 +17,6 @@ import {
   approximateFraction,
   CSS_UNITS,
   DEFAULT_SCALE,
-  getGlobalEventBus,
   getOutputScale,
   NullL10n,
   RendererType,
@@ -92,7 +91,7 @@ class PDFPageView {
     this.useOnlyCssZoom = options.useOnlyCssZoom || false;
     this.maxCanvasPixels = options.maxCanvasPixels || MAX_CANVAS_PIXELS;
 
-    this.eventBus = options.eventBus || getGlobalEventBus();
+    this.eventBus = options.eventBus;
     this.renderingQueue = options.renderingQueue;
     this.textLayerFactory = options.textLayerFactory;
     this.annotationLayerFactory = options.annotationLayerFactory;
@@ -403,16 +402,20 @@ class PDFPageView {
       console.error("Must be in new state before drawing");
       this.reset(); // Ensure that we reset all state to prevent issues.
     }
+    const { div, pdfPage } = this;
 
-    if (!this.pdfPage) {
+    if (!pdfPage) {
       this.renderingState = RenderingStates.FINISHED;
-      return Promise.reject(new Error("Page is not loaded"));
+
+      if (this.loadingIconDiv) {
+        div.removeChild(this.loadingIconDiv);
+        delete this.loadingIconDiv;
+      }
+      return Promise.reject(new Error("pdfPage is not loaded"));
     }
 
     this.renderingState = RenderingStates.RUNNING;
 
-    const pdfPage = this.pdfPage;
-    const div = this.div;
     // Wrap the canvas so that if it has a CSS transform for high DPI the
     // overflow will be hidden in Firefox.
     const canvasWrapper = document.createElement("div");
@@ -444,7 +447,8 @@ class PDFPageView {
         textLayerDiv,
         this.id - 1,
         this.viewport,
-        this.textLayerMode === TextLayerMode.ENABLE_ENHANCE
+        this.textLayerMode === TextLayerMode.ENABLE_ENHANCE,
+        this.eventBus
       );
     }
     this.textLayer = textLayer;
@@ -508,8 +512,8 @@ class PDFPageView {
     this.paintTask = paintTask;
 
     const resultPromise = paintTask.promise.then(
-      function() {
-        return finishPaintTask(null).then(function() {
+      function () {
+        return finishPaintTask(null).then(function () {
           if (textLayer) {
             const readableStream = pdfPage.streamTextContent({
               normalizeWhitespace: true,
@@ -519,7 +523,7 @@ class PDFPageView {
           }
         });
       },
-      function(reason) {
+      function (reason) {
         return finishPaintTask(reason);
       }
     );
@@ -569,7 +573,7 @@ class PDFPageView {
     // is complete when `!this.renderingQueue`, to prevent black flickering.
     canvas.setAttribute("hidden", "hidden");
     let isCanvasHidden = true;
-    const showCanvas = function() {
+    const showCanvas = function () {
       if (isCanvasHidden) {
         canvas.removeAttribute("hidden");
         isCanvasHidden = false;
@@ -581,7 +585,7 @@ class PDFPageView {
 
     if (
       typeof PDFJSDev === "undefined" ||
-      PDFJSDev.test("MOZCENTRAL || FIREFOX || GENERIC")
+      PDFJSDev.test("MOZCENTRAL || GENERIC")
     ) {
       canvas.mozOpaque = true;
     }
@@ -633,7 +637,7 @@ class PDFPageView {
       renderInteractiveForms: this.renderInteractiveForms,
     };
     const renderTask = this.pdfPage.render(renderContext);
-    renderTask.onContinue = function(cont) {
+    renderTask.onContinue = function (cont) {
       showCanvas();
       if (result.onRenderContinue) {
         result.onRenderContinue(cont);
@@ -643,11 +647,11 @@ class PDFPageView {
     };
 
     renderTask.promise.then(
-      function() {
+      function () {
         showCanvas();
         renderCapability.resolve(undefined);
       },
-      function(error) {
+      function (error) {
         showCanvas();
         renderCapability.reject(error);
       }
@@ -658,7 +662,7 @@ class PDFPageView {
   paintOnSvg(wrapper) {
     if (
       typeof PDFJSDev !== "undefined" &&
-      PDFJSDev.test("FIREFOX || MOZCENTRAL || CHROME")
+      PDFJSDev.test("MOZCENTRAL || CHROME")
     ) {
       // Return a mock object, to prevent errors such as e.g.
       // "TypeError: paintTask.promise is undefined".
@@ -673,7 +677,7 @@ class PDFPageView {
     const ensureNotCancelled = () => {
       if (cancelled) {
         throw new RenderingCancelledException(
-          "Rendering cancelled, page " + this.id,
+          `Rendering cancelled, page ${this.id}`,
           "svg"
         );
       }

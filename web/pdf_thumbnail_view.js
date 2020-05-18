@@ -54,7 +54,7 @@ const TempImageFactory = (function TempImageFactoryClosure() {
       // background ourselves. `_getPageDrawContext` uses CSS rules for this.
       if (
         typeof PDFJSDev === "undefined" ||
-        PDFJSDev.test("MOZCENTRAL || FIREFOX || GENERIC")
+        PDFJSDev.test("MOZCENTRAL || GENERIC")
       ) {
         tempCanvas.mozOpaque = true;
       }
@@ -128,7 +128,7 @@ class PDFThumbnailView {
     this._thumbPageTitle.then(msg => {
       anchor.title = msg;
     });
-    anchor.onclick = function() {
+    anchor.onclick = function () {
       linkService.page = id;
       return false;
     };
@@ -228,7 +228,7 @@ class PDFThumbnailView {
 
     if (
       typeof PDFJSDev === "undefined" ||
-      PDFJSDev.test("MOZCENTRAL || FIREFOX || GENERIC")
+      PDFJSDev.test("MOZCENTRAL || GENERIC")
     ) {
       canvas.mozOpaque = true;
     }
@@ -295,6 +295,13 @@ class PDFThumbnailView {
       console.error("Must be in new state before drawing");
       return Promise.resolve(undefined);
     }
+    const { pdfPage } = this;
+
+    if (!pdfPage) {
+      this.renderingState = RenderingStates.FINISHED;
+      return Promise.reject(new Error("pdfPage is not loaded"));
+    }
+
     this.renderingState = RenderingStates.RUNNING;
 
     const renderCapability = createPromiseCapability();
@@ -339,14 +346,14 @@ class PDFThumbnailView {
       canvasContext: ctx,
       viewport: drawViewport,
     };
-    const renderTask = (this.renderTask = this.pdfPage.render(renderContext));
+    const renderTask = (this.renderTask = pdfPage.render(renderContext));
     renderTask.onContinue = renderContinueCallback;
 
     renderTask.promise.then(
-      function() {
+      function () {
         finishRenderTask(null);
       },
-      function(error) {
+      function (error) {
         finishRenderTask(error);
       }
     );

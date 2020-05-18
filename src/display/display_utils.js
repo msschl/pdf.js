@@ -245,13 +245,16 @@ class PageViewport {
         rotateC = -1;
         rotateD = 0;
         break;
-      // case 0:
-      default:
+      case 0:
         rotateA = 1;
         rotateB = 0;
         rotateC = 0;
         rotateD = -1;
         break;
+      default:
+        throw new Error(
+          "PageViewport: Invalid rotation, must be a multiple of 90 degrees."
+        );
     }
 
     if (dontFlip) {
@@ -461,8 +464,8 @@ class StatTimer {
 
   toString() {
     // Find the longest name for padding purposes.
-    let outBuf = [],
-      longest = 0;
+    const outBuf = [];
+    let longest = 0;
     for (const time of this.times) {
       const name = time.name;
       if (name.length > longest) {
@@ -502,7 +505,7 @@ function loadScript(src) {
     script.src = src;
 
     script.onload = resolve;
-    script.onerror = function() {
+    script.onerror = function () {
       reject(new Error(`Cannot load script at: ${script.src}`));
     };
     (document.head || document.documentElement).appendChild(script);

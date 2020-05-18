@@ -267,11 +267,11 @@ class Catalog {
       dests = Object.create(null);
     if (obj instanceof NameTree) {
       const names = obj.getAll();
-      for (let name in names) {
+      for (const name in names) {
         dests[name] = fetchDestination(names[name]);
       }
     } else if (obj instanceof Dict) {
-      obj.forEach(function(key, value) {
+      obj.forEach(function (key, value) {
         if (value) {
           dests[key] = fetchDestination(value);
         }
@@ -479,7 +479,7 @@ class Catalog {
     };
 
     const obj = this.catDict.get("ViewerPreferences");
-    const prefs = Object.create(null);
+    let prefs = null;
 
     if (isDict(obj)) {
       for (const key in ViewerPreferencesValidators) {
@@ -578,11 +578,18 @@ class Catalog {
             }
             break;
           default:
-            assert(typeof value === "boolean");
+            if (typeof value !== "boolean") {
+              throw new FormatError(
+                `viewerPreferences - expected a boolean value for: ${key}`
+              );
+            }
             prefValue = value;
         }
 
         if (prefValue !== undefined) {
+          if (!prefs) {
+            prefs = Object.create(null);
+          }
           prefs[key] = prefValue;
         } else {
           info(`Bad value in ViewerPreferences for "${key}".`);
@@ -592,9 +599,12 @@ class Catalog {
     return shadow(this, "viewerPreferences", prefs);
   }
 
-  get openActionDestination() {
+  /**
+   * NOTE: "JavaScript" actions are, for now, handled by `get javaScript` below.
+   */
+  get openAction() {
     const obj = this.catDict.get("OpenAction");
-    let openActionDest = null;
+    let openAction = null;
 
     if (isDict(obj)) {
       // Convert the OpenAction dictionary into a format that works with
@@ -602,16 +612,27 @@ class Catalog {
       const destDict = new Dict(this.xref);
       destDict.set("A", obj);
 
-      const resultObj = { url: null, dest: null };
+      const resultObj = { url: null, dest: null, action: null };
       Catalog.parseDestDictionary({ destDict, resultObj });
 
       if (Array.isArray(resultObj.dest)) {
-        openActionDest = resultObj.dest;
+        if (!openAction) {
+          openAction = Object.create(null);
+        }
+        openAction.dest = resultObj.dest;
+      } else if (resultObj.action) {
+        if (!openAction) {
+          openAction = Object.create(null);
+        }
+        openAction.action = resultObj.action;
       }
     } else if (Array.isArray(obj)) {
-      openActionDest = obj;
+      if (!openAction) {
+        openAction = Object.create(null);
+      }
+      openAction.dest = obj;
     }
-    return shadow(this, "openActionDestination", openActionDest);
+    return shadow(this, "openAction", openAction);
   }
 
   get attachments() {
@@ -668,27 +689,10 @@ class Catalog {
       }
     }
 
-    // Append OpenAction actions to the JavaScript array.
-    const openActionDict = this.catDict.get("OpenAction");
-    if (
-      isDict(openActionDict) &&
-      (isName(openActionDict.get("Type"), "Action") ||
-        !openActionDict.has("Type"))
-    ) {
-      const actionType = openActionDict.get("S");
-      if (isName(actionType, "Named")) {
-        // The named Print action is not a part of the PDF 1.7 specification,
-        // but is supported by many PDF readers/writers (including Adobe's).
-        const action = openActionDict.get("N");
-        if (isName(action, "Print")) {
-          if (!javaScript) {
-            javaScript = [];
-          }
-          javaScript.push("print({});");
-        }
-      } else {
-        appendIfJavaScriptDict(openActionDict);
-      }
+    // Append OpenAction "JavaScript" actions to the JavaScript array.
+    const openAction = this.catDict.get("OpenAction");
+    if (isDict(openAction) && isName(openAction.get("S"), "JavaScript")) {
+      appendIfJavaScriptDict(openAction);
     }
 
     return shadow(this, "javaScript", javaScript);
@@ -696,7 +700,7 @@ class Catalog {
 
   fontFallback(id, handler) {
     const promises = [];
-    this.fontCache.forEach(function(promise) {
+    this.fontCache.forEach(function (promise) {
       promises.push(promise);
     });
 
@@ -715,7 +719,7 @@ class Catalog {
     this.pageKidsCountCache.clear();
 
     const promises = [];
-    this.fontCache.forEach(function(promise) {
+    this.fontCache.forEach(function (promise) {
       promises.push(promise);
     });
 
@@ -731,6 +735,7 @@ class Catalog {
   getPageDict(pageIndex) {
     const capability = createPromiseCapability();
     const nodesToVisit = [this.catDict.getRaw("Pages")];
+    const visitedNodes = new RefSet();
     const xref = this.xref,
       pageKidsCountCache = this.pageKidsCountCache;
     let count,
@@ -747,8 +752,16 @@ class Catalog {
             currentPageIndex += count;
             continue;
           }
+          // Prevent circular references in the /Pages tree.
+          if (visitedNodes.has(currentNode)) {
+            capability.reject(
+              new FormatError("Pages tree contains circular reference.")
+            );
+            return;
+          }
+          visitedNodes.put(currentNode);
 
-          xref.fetchAsync(currentNode).then(function(obj) {
+          xref.fetchAsync(currentNode).then(function (obj) {
             if (isDict(obj, "Page") || (isDict(obj) && !obj.has("Kids"))) {
               if (pageIndex === currentPageIndex) {
                 // Cache the Page reference, since it can *greatly* improve
@@ -843,7 +856,7 @@ class Catalog {
 
       return xref
         .fetchAsync(kidRef)
-        .then(function(node) {
+        .then(function (node) {
           if (
             isRefsEqual(kidRef, pageRef) &&
             !isDict(node, "Page") &&
@@ -862,7 +875,7 @@ class Catalog {
           parentRef = node.getRaw("Parent");
           return node.getAsync("Parent");
         })
-        .then(function(parent) {
+        .then(function (parent) {
           if (!parent) {
             return null;
           }
@@ -871,7 +884,7 @@ class Catalog {
           }
           return parent.getAsync("Kids");
         })
-        .then(function(kids) {
+        .then(function (kids) {
           if (!kids) {
             return null;
           }
@@ -888,12 +901,12 @@ class Catalog {
               break;
             }
             kidPromises.push(
-              xref.fetchAsync(kid).then(function(kid) {
-                if (!isDict(kid)) {
+              xref.fetchAsync(kid).then(function (obj) {
+                if (!isDict(obj)) {
                   throw new FormatError("Kid node must be a dictionary.");
                 }
-                if (kid.has("Count")) {
-                  total += kid.get("Count");
+                if (obj.has("Count")) {
+                  total += obj.get("Count");
                 } else {
                   // Page leaf node.
                   total++;
@@ -904,7 +917,7 @@ class Catalog {
           if (!found) {
             throw new FormatError("Kid reference not found in parent's kids.");
           }
-          return Promise.all(kidPromises).then(function() {
+          return Promise.all(kidPromises).then(function () {
             return [total, parentRef];
           });
         });
@@ -912,7 +925,7 @@ class Catalog {
 
     let total = 0;
     function next(ref) {
-      return pagesBeforeRef(ref).then(function(args) {
+      return pagesBeforeRef(ref).then(function (args) {
         if (!args) {
           return total;
         }
@@ -1063,9 +1076,7 @@ class Catalog {
             const URL_OPEN_METHODS = ["app.launchURL", "window.open"];
             const regex = new RegExp(
               "^\\s*(" +
-                URL_OPEN_METHODS.join("|")
-                  .split(".")
-                  .join("\\.") +
+                URL_OPEN_METHODS.join("|").split(".").join("\\.") +
                 ")\\((?:'|\")([^'\"]*)(?:'|\")(?:,\\s*(\\w+)\\)|\\))",
               "i"
             );
@@ -1110,6 +1121,7 @@ class Catalog {
 }
 
 var XRef = (function XRefClosure() {
+  // eslint-disable-next-line no-shadow
   function XRef(stream, pdfManager) {
     this.stream = stream;
     this.pdfManager = pdfManager;
@@ -1527,11 +1539,11 @@ var XRef = (function XRefClosure() {
           // we won't skip over a new 'obj' operator in corrupt files where
           // 'endobj' operators are missing (fixes issue9105_reduced.pdf).
           while (startPos < buffer.length) {
-            let endPos = startPos + skipUntil(buffer, startPos, objBytes) + 4;
+            const endPos = startPos + skipUntil(buffer, startPos, objBytes) + 4;
             contentLength = endPos - position;
 
-            let checkPos = Math.max(endPos - CHECK_CONTENT_LENGTH, startPos);
-            let tokenStr = bytesToString(buffer.subarray(checkPos, endPos));
+            const checkPos = Math.max(endPos - CHECK_CONTENT_LENGTH, startPos);
+            const tokenStr = bytesToString(buffer.subarray(checkPos, endPos));
 
             // Check if the current object ends with an 'endobj' operator.
             if (endobjRegExp.test(tokenStr)) {
@@ -1539,7 +1551,7 @@ var XRef = (function XRefClosure() {
             } else {
               // Check if an "obj" occurrence is actually a new object,
               // i.e. the current object is missing the 'endobj' operator.
-              let objToken = nestedObjRegExp.exec(tokenStr);
+              const objToken = nestedObjRegExp.exec(tokenStr);
 
               if (objToken && objToken[1]) {
                 warn(
@@ -1552,7 +1564,7 @@ var XRef = (function XRefClosure() {
             }
             startPos = endPos;
           }
-          let content = buffer.subarray(position, position + contentLength);
+          const content = buffer.subarray(position, position + contentLength);
 
           // checking XRef stream suspect
           // (it shall have '/XRef' and next char is not a letter)
@@ -1597,7 +1609,7 @@ var XRef = (function XRefClosure() {
           continue;
         }
         // read the trailer dictionary
-        let dict = parser.getObj();
+        const dict = parser.getObj();
         if (!isDict(dict)) {
           continue;
         }
@@ -1634,7 +1646,7 @@ var XRef = (function XRefClosure() {
       // Keep track of already parsed XRef tables, to prevent an infinite loop
       // when parsing corrupt PDF files where e.g. the /Prev entries create a
       // circular dependency between tables (fixes bug1393476.pdf).
-      let startXRefParsedCache = Object.create(null);
+      const startXRefParsedCache = Object.create(null);
 
       try {
         while (this.startXRefQueue.length) {
@@ -2083,6 +2095,7 @@ class NumberTree extends NameOrNumberTree {
  * collections attributes and related files (/RF)
  */
 var FileSpec = (function FileSpecClosure() {
+  // eslint-disable-next-line no-shadow
   function FileSpec(root, xref) {
     if (!root || !isDict(root)) {
       return;
@@ -2178,7 +2191,7 @@ var FileSpec = (function FileSpecClosure() {
  * that have references to the catalog or other pages since that will cause the
  * entire PDF document object graph to be traversed.
  */
-let ObjectLoader = (function() {
+const ObjectLoader = (function () {
   function mayHaveChildren(value) {
     return (
       value instanceof Ref ||
@@ -2190,17 +2203,17 @@ let ObjectLoader = (function() {
 
   function addChildren(node, nodesToVisit) {
     if (node instanceof Dict || isStream(node)) {
-      let dict = node instanceof Dict ? node : node.dict;
-      let dictKeys = dict.getKeys();
+      const dict = node instanceof Dict ? node : node.dict;
+      const dictKeys = dict.getKeys();
       for (let i = 0, ii = dictKeys.length; i < ii; i++) {
-        let rawValue = dict.getRaw(dictKeys[i]);
+        const rawValue = dict.getRaw(dictKeys[i]);
         if (mayHaveChildren(rawValue)) {
           nodesToVisit.push(rawValue);
         }
       }
     } else if (Array.isArray(node)) {
       for (let i = 0, ii = node.length; i < ii; i++) {
-        let value = node[i];
+        const value = node[i];
         if (mayHaveChildren(value)) {
           nodesToVisit.push(value);
         }
@@ -2208,6 +2221,7 @@ let ObjectLoader = (function() {
     }
   }
 
+  // eslint-disable-next-line no-shadow
   function ObjectLoader(dict, keys, xref) {
     this.dict = dict;
     this.keys = keys;
@@ -2226,12 +2240,12 @@ let ObjectLoader = (function() {
         return undefined;
       }
 
-      let { keys, dict } = this;
+      const { keys, dict } = this;
       this.refSet = new RefSet();
       // Setup the initial nodes to visit.
-      let nodesToVisit = [];
+      const nodesToVisit = [];
       for (let i = 0, ii = keys.length; i < ii; i++) {
-        let rawValue = dict.getRaw(keys[i]);
+        const rawValue = dict.getRaw(keys[i]);
         // Skip nodes that are guaranteed to be empty.
         if (rawValue !== undefined) {
           nodesToVisit.push(rawValue);
@@ -2241,8 +2255,8 @@ let ObjectLoader = (function() {
     },
 
     async _walk(nodesToVisit) {
-      let nodesToRevisit = [];
-      let pendingRequests = [];
+      const nodesToRevisit = [];
+      const pendingRequests = [];
       // DFS walk of the object graph.
       while (nodesToVisit.length) {
         let currentNode = nodesToVisit.pop();
@@ -2265,10 +2279,10 @@ let ObjectLoader = (function() {
           }
         }
         if (currentNode && currentNode.getBaseStreams) {
-          let baseStreams = currentNode.getBaseStreams();
+          const baseStreams = currentNode.getBaseStreams();
           let foundMissingData = false;
           for (let i = 0, ii = baseStreams.length; i < ii; i++) {
-            let stream = baseStreams[i];
+            const stream = baseStreams[i];
             if (stream.allChunksLoaded && !stream.allChunksLoaded()) {
               foundMissingData = true;
               pendingRequests.push({ begin: stream.start, end: stream.end });
@@ -2286,7 +2300,7 @@ let ObjectLoader = (function() {
         await this.xref.stream.manager.requestRanges(pendingRequests);
 
         for (let i = 0, ii = nodesToRevisit.length; i < ii; i++) {
-          let node = nodesToRevisit[i];
+          const node = nodesToRevisit[i];
           // Remove any reference nodes from the current `RefSet` so they
           // aren't skipped when we revist them.
           if (node instanceof Ref) {

@@ -503,7 +503,7 @@ class Annotation {
       }
 
       const objectLoader = new ObjectLoader(resources, keys, resources.xref);
-      return objectLoader.load().then(function() {
+      return objectLoader.load().then(function () {
         return resources;
       });
     });
@@ -941,7 +941,7 @@ class TextWidgetAnnotation extends WidgetAnnotation {
         resources: this.fieldResources,
         operatorList,
       })
-      .then(function() {
+      .then(function () {
         return operatorList;
       });
   }
@@ -1058,8 +1058,8 @@ class ChoiceWidgetAnnotation extends WidgetAnnotation {
     if (Array.isArray(options)) {
       const xref = params.xref;
       for (let i = 0, ii = options.length; i < ii; i++) {
-        let option = xref.fetchIfRef(options[i]);
-        let isOptionArray = Array.isArray(option);
+        const option = xref.fetchIfRef(options[i]);
+        const isOptionArray = Array.isArray(option);
 
         this.data.options[i] = {
           exportValue: isOptionArray ? xref.fetchIfRef(option[0]) : option,

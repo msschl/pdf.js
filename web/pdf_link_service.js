@@ -13,7 +13,7 @@
  * limitations under the License.
  */
 
-import { getGlobalEventBus, parseQueryString } from "./ui_utils.js";
+import { parseQueryString } from "./ui_utils.js";
 
 /**
  * @typedef {Object} PDFLinkServiceOptions
@@ -23,6 +23,9 @@ import { getGlobalEventBus, parseQueryString } from "./ui_utils.js";
  *   Defaults to using no target.
  * @property {string} [externalLinkRel] - Specifies the `rel` attribute for
  *   external links. Defaults to stripping the referrer.
+ * @property {boolean} [ignoreDestinationZoom] - Ignores the zoom argument,
+ *   thus preserving the current zoom level in the viewer, when navigating
+ *   to internal destinations. The default value is `false`.
  */
 
 /**
@@ -39,11 +42,13 @@ class PDFLinkService {
     externalLinkTarget = null,
     externalLinkRel = null,
     externalLinkEnabled = true,
+    ignoreDestinationZoom = false,
   } = {}) {
-    this.eventBus = eventBus || getGlobalEventBus();
+    this.eventBus = eventBus;
     this.externalLinkTarget = externalLinkTarget;
     this.externalLinkRel = externalLinkRel;
     this.externalLinkEnabled = externalLinkEnabled;
+    this._ignoreDestinationZoom = ignoreDestinationZoom;
 
     this.baseUrl = null;
     this.pdfDocument = null;
@@ -158,6 +163,7 @@ class PDFLinkService {
       this.pdfViewer.scrollPageIntoView({
         pageNumber,
         destArray: explicitDest,
+        ignoreDestinationZoom: this._ignoreDestinationZoom,
       });
     };
 
@@ -222,15 +228,11 @@ class PDFLinkService {
       if ("search" in params) {
         this.eventBus.dispatch("findfromurlhash", {
           source: this,
-          query: params["search"].replace(/"/g, ""),
-          phraseSearch: params["phrase"] === "true",
+          query: params.search.replace(/"/g, ""),
+          phraseSearch: params.phrase === "true",
         });
       }
       // borrowing syntax from "Parameters for Opening PDF Files"
-      if ("nameddest" in params) {
-        this.navigateTo(params.nameddest);
-        return;
-      }
       if ("page" in params) {
         pageNumber = params.page | 0 || 1;
       }
@@ -301,6 +303,11 @@ class PDFLinkService {
           source: this,
           mode: params.pagemode,
         });
+      }
+      // Ensure that this parameter is *always* handled last, in order to
+      // guarantee that it won't be overridden (e.g. by the "page" parameter).
+      if ("nameddest" in params) {
+        this.navigateTo(params.nameddest);
       }
     } else {
       // Named (or explicit) destination.
@@ -468,6 +475,7 @@ class SimpleLinkService {
     this.externalLinkTarget = null;
     this.externalLinkRel = null;
     this.externalLinkEnabled = true;
+    this._ignoreDestinationZoom = false;
   }
 
   /**

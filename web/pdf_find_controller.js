@@ -13,9 +13,9 @@
  * limitations under the License.
  */
 
-import { getGlobalEventBus, scrollIntoView } from "./ui_utils.js";
 import { createPromiseCapability } from "pdfjs-lib";
 import { getCharacterType } from "./pdf_find_utils.js";
+import { scrollIntoView } from "./ui_utils.js";
 
 const FindState = {
   FOUND: 0,
@@ -49,7 +49,7 @@ function normalize(text) {
     const replace = Object.keys(CHARACTERS_TO_NORMALIZE).join("");
     normalizationRegex = new RegExp(`[${replace}]`, "g");
   }
-  return text.replace(normalizationRegex, function(ch) {
+  return text.replace(normalizationRegex, function (ch) {
     return CHARACTERS_TO_NORMALIZE[ch];
   });
 }
@@ -67,12 +67,12 @@ class PDFFindController {
   /**
    * @param {PDFFindControllerOptions} options
    */
-  constructor({ linkService, eventBus = getGlobalEventBus() }) {
+  constructor({ linkService, eventBus }) {
     this._linkService = linkService;
     this._eventBus = eventBus;
 
     this._reset();
-    eventBus.on("findbarclose", this._onFindBarClose.bind(this));
+    eventBus._on("findbarclose", this._onFindBarClose.bind(this));
   }
 
   get highlightMatches() {
@@ -277,7 +277,7 @@ class PDFFindController {
    * the `matches` and keeps elements with a longer match length.
    */
   _prepareMatches(matchesWithLength, matches, matchesLength) {
-    function isSubTerm(matchesWithLength, currentIndex) {
+    function isSubTerm(currentIndex) {
       const currentElem = matchesWithLength[currentIndex];
       const nextElem = matchesWithLength[currentIndex + 1];
 
@@ -312,13 +312,13 @@ class PDFFindController {
 
     // Sort the array of `{ match: <match>, matchLength: <matchLength> }`
     // objects on increasing index first and on the length otherwise.
-    matchesWithLength.sort(function(a, b) {
+    matchesWithLength.sort(function (a, b) {
       return a.match === b.match
         ? a.matchLength - b.matchLength
         : a.match - b.match;
     });
     for (let i = 0, len = matchesWithLength.length; i < len; i++) {
-      if (isSubTerm(matchesWithLength, i)) {
+      if (isSubTerm(i)) {
         continue;
       }
       matches.push(matchesWithLength[i].match);

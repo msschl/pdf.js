@@ -423,7 +423,7 @@ class PDFPresentationMode {
 
     window.addEventListener("mousemove", this.showControlsBind);
     window.addEventListener("mousedown", this.mouseDownBind);
-    window.addEventListener("wheel", this.mouseWheelBind);
+    window.addEventListener("wheel", this.mouseWheelBind, { passive: false });
     window.addEventListener("keydown", this.resetMouseScrollStateBind);
     window.addEventListener("contextmenu", this.contextMenuBind);
     window.addEventListener("touchstart", this.touchSwipeBind);
@@ -437,7 +437,9 @@ class PDFPresentationMode {
   _removeWindowListeners() {
     window.removeEventListener("mousemove", this.showControlsBind);
     window.removeEventListener("mousedown", this.mouseDownBind);
-    window.removeEventListener("wheel", this.mouseWheelBind);
+    window.removeEventListener("wheel", this.mouseWheelBind, {
+      passive: false,
+    });
     window.removeEventListener("keydown", this.resetMouseScrollStateBind);
     window.removeEventListener("contextmenu", this.contextMenuBind);
     window.removeEventListener("touchstart", this.touchSwipeBind);
@@ -471,10 +473,7 @@ class PDFPresentationMode {
 
     window.addEventListener("fullscreenchange", this.fullscreenChangeBind);
     window.addEventListener("mozfullscreenchange", this.fullscreenChangeBind);
-    if (
-      typeof PDFJSDev === "undefined" ||
-      !PDFJSDev.test("FIREFOX || MOZCENTRAL")
-    ) {
+    if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
       window.addEventListener(
         "webkitfullscreenchange",
         this.fullscreenChangeBind
@@ -492,10 +491,7 @@ class PDFPresentationMode {
       "mozfullscreenchange",
       this.fullscreenChangeBind
     );
-    if (
-      typeof PDFJSDev === "undefined" ||
-      !PDFJSDev.test("FIREFOX || MOZCENTRAL")
-    ) {
+    if (typeof PDFJSDev === "undefined" || !PDFJSDev.test("MOZCENTRAL")) {
       window.removeEventListener(
         "webkitfullscreenchange",
         this.fullscreenChangeBind

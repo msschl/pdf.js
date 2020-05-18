@@ -29,7 +29,6 @@ import {
   FormatError,
   info,
   isNum,
-  isSpace,
   StreamType,
   warn,
 } from "../shared/util.js";
@@ -44,11 +43,11 @@ import {
   Name,
   Ref,
 } from "./primitives.js";
+import { isWhiteSpace, MissingDataException } from "./core_utils.js";
 import { CCITTFaxStream } from "./ccitt_stream.js";
 import { Jbig2Stream } from "./jbig2_stream.js";
 import { JpegStream } from "./jpeg_stream.js";
 import { JpxStream } from "./jpx_stream.js";
-import { MissingDataException } from "./core_utils.js";
 
 const MAX_LENGTH_TO_CACHE = 1000;
 const MAX_ADLER32_LENGTH = 5552;
@@ -207,8 +206,8 @@ class Parser {
       CR = 0xd;
     const n = 10,
       NUL = 0x0;
-    let startPos = stream.pos,
-      state = 0,
+    const startPos = stream.pos;
+    let state = 0,
       ch,
       maybeEIPos;
     while ((ch = stream.getByte()) !== -1) {
@@ -217,7 +216,7 @@ class Parser {
       } else if (state === 1) {
         state = ch === I ? 2 : 0;
       } else {
-        assert(state === 2);
+        assert(state === 2, "findDefaultInlineStreamEnd - invalid state.");
         if (ch === SPACE || ch === LF || ch === CR) {
           maybeEIPos = stream.pos;
           // Let's check that the next `n` bytes are ASCII... just to be sure.
@@ -271,7 +270,7 @@ class Parser {
 
     // Ensure that we don't accidentally truncate the inline image, when the
     // data is immediately followed by the "EI" marker (fixes issue10388.pdf).
-    if (!isSpace(ch)) {
+    if (!isWhiteSpace(ch)) {
       endOffset--;
     }
     return stream.pos - endOffset - startPos;
@@ -282,11 +281,10 @@ class Parser {
    * @returns {number} The inline stream length.
    */
   findDCTDecodeInlineStreamEnd(stream) {
-    let startPos = stream.pos,
-      foundEOI = false,
+    const startPos = stream.pos;
+    let foundEOI = false,
       b,
-      markerLength,
-      length;
+      markerLength;
     while ((b = stream.getByte()) !== -1) {
       if (b !== 0xff) {
         // Not a valid marker.
@@ -367,7 +365,7 @@ class Parser {
         break;
       }
     }
-    length = stream.pos - startPos;
+    const length = stream.pos - startPos;
     if (b === -1) {
       warn(
         "Inline DCTDecode image stream: " +
@@ -387,9 +385,8 @@ class Parser {
   findASCII85DecodeInlineStreamEnd(stream) {
     const TILDE = 0x7e,
       GT = 0x3e;
-    let startPos = stream.pos,
-      ch,
-      length;
+    const startPos = stream.pos;
+    let ch;
     while ((ch = stream.getByte()) !== -1) {
       if (ch === TILDE) {
         const tildePos = stream.pos;
@@ -397,7 +394,7 @@ class Parser {
         ch = stream.peekByte();
         // Handle corrupt PDF documents which contains whitespace "inside" of
         // the EOD marker (fixes issue10614.pdf).
-        while (isSpace(ch)) {
+        while (isWhiteSpace(ch)) {
           stream.skip();
           ch = stream.peekByte();
         }
@@ -415,7 +412,7 @@ class Parser {
         }
       }
     }
-    length = stream.pos - startPos;
+    const length = stream.pos - startPos;
     if (ch === -1) {
       warn(
         "Inline ASCII85Decode image stream: " +
@@ -434,15 +431,14 @@ class Parser {
    */
   findASCIIHexDecodeInlineStreamEnd(stream) {
     const GT = 0x3e;
-    let startPos = stream.pos,
-      ch,
-      length;
+    const startPos = stream.pos;
+    let ch;
     while ((ch = stream.getByte()) !== -1) {
       if (ch === GT) {
         break;
       }
     }
-    length = stream.pos - startPos;
+    const length = stream.pos - startPos;
     if (ch === -1) {
       warn(
         "Inline ASCIIHexDecode image stream: " +
@@ -644,7 +640,7 @@ class Parser {
             // Ensure that the byte immediately following the truncated
             // endstream command is a space, to prevent false positives.
             const lastByte = stream.peekBytes(end + 1)[end];
-            if (!isSpace(lastByte)) {
+            if (!isWhiteSpace(lastByte)) {
               break;
             }
             info(
@@ -693,8 +689,8 @@ class Parser {
 
     let maybeLength = length;
     if (Array.isArray(filter)) {
-      let filterArray = filter;
-      let paramsArray = params;
+      const filterArray = filter;
+      const paramsArray = params;
       for (let i = 0, ii = filterArray.length; i < ii; ++i) {
         filter = this.xref.fetchIfRef(filterArray[i]);
         if (!isName(filter)) {
@@ -846,6 +842,7 @@ class Lexer {
     // other commands or literals as a prefix. The knowCommands is optional.
     this.knownCommands = knownCommands;
 
+    this._hexStringNumWarn = 0;
     this.beginInlineImagePos = -1;
   }
 
@@ -889,7 +886,7 @@ class Lexer {
       if (
         divideBy === 10 &&
         sign === 0 &&
-        (isSpace(ch) || ch === /* EOF = */ -1)
+        (isWhiteSpace(ch) || ch === /* EOF = */ -1)
       ) {
         // This is consistent with Adobe Reader (fixes issue9252.pdf).
         warn("Lexer.getNumber - treating a single decimal point as zero.");
@@ -951,7 +948,7 @@ class Lexer {
       baseValue /= divideBy;
     }
     if (eNotation) {
-      baseValue *= Math.pow(10, powerValueSign * powerValue);
+      baseValue *= 10 ** (powerValueSign * powerValue);
     }
     return sign * baseValue;
   }
@@ -1103,12 +1100,32 @@ class Lexer {
     return Name.get(strBuf.join(""));
   }
 
+  /**
+   * @private
+   */
+  _hexStringWarn(ch) {
+    const MAX_HEX_STRING_NUM_WARN = 5;
+
+    if (this._hexStringNumWarn++ === MAX_HEX_STRING_NUM_WARN) {
+      warn("getHexString - ignoring additional invalid characters.");
+      return;
+    }
+    if (this._hexStringNumWarn > MAX_HEX_STRING_NUM_WARN) {
+      // Limit the number of warning messages printed for a `this.getHexString`
+      // invocation, since corrupt PDF documents may otherwise spam the console
+      // enough to affect general performance negatively.
+      return;
+    }
+    warn(`getHexString - ignoring invalid character: ${ch}`);
+  }
+
   getHexString() {
     const strBuf = this.strBuf;
     strBuf.length = 0;
     let ch = this.currentChar;
     let isFirstHex = true;
     let firstDigit, secondDigit;
+    this._hexStringNumWarn = 0;
 
     while (true) {
       if (ch < 0) {
@@ -1124,14 +1141,14 @@ class Lexer {
         if (isFirstHex) {
           firstDigit = toHexDigit(ch);
           if (firstDigit === -1) {
-            warn(`Ignoring invalid character "${ch}" in hex string`);
+            this._hexStringWarn(ch);
             ch = this.nextChar();
             continue;
           }
         } else {
           secondDigit = toHexDigit(ch);
           if (secondDigit === -1) {
-            warn(`Ignoring invalid character "${ch}" in hex string`);
+            this._hexStringWarn(ch);
             ch = this.nextChar();
             continue;
           }

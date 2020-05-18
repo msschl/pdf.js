@@ -288,12 +288,26 @@ const OPS = {
 };
 
 const UNSUPPORTED_FEATURES = {
+  /** @deprecated unused */
   unknown: "unknown",
   forms: "forms",
   javaScript: "javaScript",
   smask: "smask",
   shadingPattern: "shadingPattern",
+  /** @deprecated unused */
   font: "font",
+  errorTilingPattern: "errorTilingPattern",
+  errorExtGState: "errorExtGState",
+  errorXObject: "errorXObject",
+  errorFontLoadType3: "errorFontLoadType3",
+  errorFontState: "errorFontState",
+  errorFontMissing: "errorFontMissing",
+  errorFontTranslate: "errorFontTranslate",
+  errorColorSpace: "errorColorSpace",
+  errorOperatorList: "errorOperatorList",
+  errorFontToUnicode: "errorFontToUnicode",
+  errorFontLoadNative: "errorFontLoadNative",
+  errorFontGetPath: "errorFontGetPath",
 };
 
 const PasswordResponses = {
@@ -405,6 +419,7 @@ function shadow(obj, prop, value) {
 }
 
 const BaseException = (function BaseExceptionClosure() {
+  // eslint-disable-next-line no-shadow
   function BaseException(message) {
     if (this.constructor === BaseException) {
       unreachable("Cannot initialize BaseException.");
@@ -501,7 +516,7 @@ function arrayByteLength(arr) {
   if (arr.length !== undefined) {
     return arr.length;
   }
-  assert(arr.byteLength !== undefined);
+  assert(arr.byteLength !== undefined, "arrayByteLength - invalid argument.");
   return arr.byteLength;
 }
 
@@ -547,42 +562,18 @@ function string32(value) {
   );
 }
 
-// Calculate the base 2 logarithm of the number `x`. This differs from the
-// native function in the sense that it returns the ceiling value and that it
-// returns 0 instead of `Infinity`/`NaN` for `x` values smaller than/equal to 0.
-function log2(x) {
-  if (x <= 0) {
-    return 0;
-  }
-  return Math.ceil(Math.log2(x));
-}
-
-function readInt8(data, start) {
-  return (data[start] << 24) >> 24;
-}
-
-function readUint16(data, offset) {
-  return (data[offset] << 8) | data[offset + 1];
-}
-
-function readUint32(data, offset) {
-  return (
-    ((data[offset] << 24) |
-      (data[offset + 1] << 16) |
-      (data[offset + 2] << 8) |
-      data[offset + 3]) >>>
-    0
-  );
-}
-
-// Lazy test the endianness of the platform
-// NOTE: This will be 'true' for simulated TypedArrays
+// Checks the endianness of the platform.
 function isLittleEndian() {
   const buffer8 = new Uint8Array(4);
   buffer8[0] = 1;
   const view32 = new Uint32Array(buffer8.buffer, 0, 1);
   return view32[0] === 1;
 }
+const IsLittleEndianCached = {
+  get value() {
+    return shadow(this, "value", isLittleEndian());
+  },
+};
 
 // Checks if it's possible to eval JS expressions.
 function isEvalSupported() {
@@ -593,6 +584,11 @@ function isEvalSupported() {
     return false;
   }
 }
+const IsEvalSupportedCached = {
+  get value() {
+    return shadow(this, "value", isEvalSupported());
+  },
+};
 
 const rgbBuf = ["rgb(", 0, ",", 0, ",", 0, ")"];
 
@@ -804,7 +800,7 @@ function utf8StringToString(str) {
 }
 
 function isEmptyObj(obj) {
-  for (let key in obj) {
+  for (const key in obj) {
     return false;
   }
   return true;
@@ -830,14 +826,9 @@ function isArrayEqual(arr1, arr2) {
   if (arr1.length !== arr2.length) {
     return false;
   }
-  return arr1.every(function(element, index) {
+  return arr1.every(function (element, index) {
     return element === arr2[index];
   });
-}
-
-// Checks if ch is one of the following characters: SPACE, TAB, CR or LF.
-function isSpace(ch) {
-  return ch === 0x20 || ch === 0x09 || ch === 0x0d || ch === 0x0a;
 }
 
 /**
@@ -865,12 +856,12 @@ function createPromiseCapability() {
       return isSettled;
     },
   });
-  capability.promise = new Promise(function(resolve, reject) {
-    capability.resolve = function(data) {
+  capability.promise = new Promise(function (resolve, reject) {
+    capability.resolve = function (data) {
       isSettled = true;
       resolve(data);
     };
-    capability.reject = function(reason) {
+    capability.reject = function (reason) {
       isSettled = true;
       reject(reason);
     };
@@ -883,6 +874,7 @@ const createObjectURL = (function createObjectURLClosure() {
   const digits =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
 
+  // eslint-disable-next-line no-shadow
   return function createObjectURL(data, contentType, forceDataSchema = false) {
     if (!forceDataSchema && URL.createObjectURL) {
       const blob = new Blob([data], { type: contentType });
@@ -949,15 +941,10 @@ export {
   isEmptyObj,
   isNum,
   isString,
-  isSpace,
   isSameOrigin,
   createValidAbsoluteUrl,
-  isLittleEndian,
-  isEvalSupported,
-  log2,
-  readInt8,
-  readUint16,
-  readUint32,
+  IsLittleEndianCached,
+  IsEvalSupportedCached,
   removeNullCharacters,
   setVerbosityLevel,
   shadow,

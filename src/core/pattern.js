@@ -38,6 +38,7 @@ var ShadingType = {
 
 var Pattern = (function PatternClosure() {
   // Constructor should define this.getPattern
+  // eslint-disable-next-line no-shadow
   function Pattern() {
     unreachable("should not call Pattern constructor");
   }
@@ -50,7 +51,7 @@ var Pattern = (function PatternClosure() {
     },
   };
 
-  Pattern.parseShading = function(
+  Pattern.parseShading = function (
     shading,
     matrix,
     xref,
@@ -450,6 +451,8 @@ Shadings.Mesh = (function MeshClosure() {
       return lut;
     }
     var cache = [];
+
+    // eslint-disable-next-line no-shadow
     return function getB(count) {
       if (!cache[count]) {
         cache[count] = buildB(count);
@@ -937,12 +940,12 @@ Shadings.Dummy = (function DummyClosure() {
 })();
 
 function getTilingPatternIR(operatorList, dict, args) {
-  let matrix = dict.getArray("Matrix");
-  let bbox = Util.normalizeRect(dict.getArray("BBox"));
-  let xstep = dict.get("XStep");
-  let ystep = dict.get("YStep");
-  let paintType = dict.get("PaintType");
-  let tilingType = dict.get("TilingType");
+  const matrix = dict.getArray("Matrix");
+  const bbox = Util.normalizeRect(dict.getArray("BBox"));
+  const xstep = dict.get("XStep");
+  const ystep = dict.get("YStep");
+  const paintType = dict.get("PaintType");
+  const tilingType = dict.get("TilingType");
 
   // Ensure that the pattern has a non-zero width and height, to prevent errors
   // in `pattern_helper.js` (fixes issue8330.pdf).

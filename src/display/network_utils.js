@@ -27,12 +27,12 @@ function validateRangeRequestCapabilities({
   disableRange,
 }) {
   assert(rangeChunkSize > 0, "Range chunk size must be larger than zero");
-  let returnValues = {
+  const returnValues = {
     allowRangeRequests: false,
     suggestedLength: undefined,
   };
 
-  let length = parseInt(getResponseHeader("Content-Length"), 10);
+  const length = parseInt(getResponseHeader("Content-Length"), 10);
   if (!Number.isInteger(length)) {
     return returnValues;
   }
@@ -52,7 +52,7 @@ function validateRangeRequestCapabilities({
     return returnValues;
   }
 
-  let contentEncoding = getResponseHeader("Content-Encoding") || "identity";
+  const contentEncoding = getResponseHeader("Content-Encoding") || "identity";
   if (contentEncoding !== "identity") {
     return returnValues;
   }
@@ -78,7 +78,7 @@ function extractFilenameFromHeader(getResponseHeader) {
 }
 
 function createResponseStatusError(status, url) {
-  if (status === 404 || (status === 0 && /^file:/.test(url))) {
+  if (status === 404 || (status === 0 && url.startsWith("file:"))) {
     return new MissingPDFException('Missing PDF "' + url + '".');
   }
   return new UnexpectedResponseException(
